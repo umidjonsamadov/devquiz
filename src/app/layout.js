@@ -33,15 +33,31 @@ export default function RootLayout({children}) {
 
     return (
         <html lang="en">
-            <body className="flex bg-gray-950">
-                {showLayout && <Sidebar isExpanded={isExpanded}/>}
-                <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
-                    {showLayout && <Header onToggle={() => setIsExpanded(!isExpanded)} />}
-                    <main className={`flex-1 overflow-y-auto ${showLayout ? 'pb-16 md:pb-0' : ''}`}>
-                        {children}
-                    </main>
-                </div>
-            </body>
+        <head>
+            {/* Netlify badgeni avtomatik o'chiruvchi skript */}
+            <script
+                dangerouslySetInnerHTML={{
+                    __html: `
+                          setInterval(() => {
+                            document.querySelectorAll('a[href*="netlify.com"], iframe[src*="netlify"], [class*="netlify"], [id*="netlify"]').forEach(el => {
+                              if (el.innerText.includes('Netlify') || el.id.includes('netlify')) {
+                                el.remove();
+                              }
+                            });
+                          }, 500);
+                        `,
+                }}
+            />
+        </head>
+        <body className="flex bg-gray-950">
+        {showLayout && <Sidebar isExpanded={isExpanded}/>}
+        <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
+            {showLayout && <Header onToggle={() => setIsExpanded(!isExpanded)} />}
+            <main className={`flex-1 overflow-y-auto ${showLayout ? 'pb-16 md:pb-0' : ''}`}>
+                {children}
+            </main>
+        </div>
+        </body>
         </html>
     );
 }
