@@ -100,6 +100,12 @@ const userSchema = new mongoose.Schema({
     }
 });
 
+// Tez qidirish va saralash uchun indexlar
+userSchema.index({ xp: -1 });
+userSchema.index({ xp: -1, joinedAt: 1 });
+userSchema.index({ joinedAt: -1 });
+userSchema.index({ questionsSolved: -1 });
+
 // clear cached model if it exists so that schema changes take effect
 if (mongoose.models.User) {
     delete mongoose.models.User;

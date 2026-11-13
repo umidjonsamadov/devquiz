@@ -8,9 +8,9 @@ export default function About() {
 
     async function fetchData() {
         try {
-            const response = await fetch('https://28quizs.netlify.app/api/auth/users');
+            const response = await fetch('/api/auth/users');
             const result = await response.json();
-            setData(result.users);
+            setData(result.users || []);
         } catch (error) {
             console.error('Error fetching data:', error);
         } finally {
@@ -30,7 +30,7 @@ export default function About() {
                 <p>Loading...</p>
             ) : (
                 data.map((item) => (
-                    <p>{item.username}</p>
+                    <p key={item._id}>{item.username}</p>
                 ))
             )}
         </>

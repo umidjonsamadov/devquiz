@@ -8,7 +8,7 @@ import mongoose from 'mongoose';
 // tolerated and collapsed at the API level.
 
 const questionSchema = new mongoose.Schema({
-    category: { type: String, required: true, trim: true },
+    category: { type: String, required: true, trim: true, index: true },
     difficulty: { type: String, enum: ['Easy', 'Medium', 'Hard'], default: 'Easy' },
     question: { type: String, required: true },
     options: [{ type: String }],
@@ -17,6 +17,10 @@ const questionSchema = new mongoose.Schema({
     time: { type: Number, default: 30 },
     createdAt: { type: Date, default: Date.now }
 });
+
+// Tez qidirish uchun compound indexlar
+questionSchema.index({ category: 1, difficulty: 1 });
+questionSchema.index({ category: 1, createdAt: -1 });
 
 // ensure that we don't hit an old model when hot-reloading in dev
 if (mongoose.models.Question) {

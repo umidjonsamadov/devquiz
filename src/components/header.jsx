@@ -1,7 +1,8 @@
 'use client';
 
-import { Bell, Search, Zap } from 'lucide-react';
+import { Bell, Zap } from 'lucide-react';
 import Link from 'next/link';
+import HeaderSearch from './search';
 import { useState, useEffect } from 'react';
 
 function getLevelProgress(xp) {
@@ -68,22 +69,14 @@ export default function Header({ onToggle }) {
                     <span className="text-green-400">D</span>MS
                 </span>
 
-                {/* Search — desktop only */}
-                <div className="hidden md:flex items-center gap-3 bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 w-56 lg:w-64">
-                    <Search size={15} className="text-gray-500 shrink-0" />
-                    <input
-                        type="text"
-                        placeholder="Qidirish..."
-                        autoComplete="off"
-                        className="bg-transparent border-none outline-none text-gray-400 text-sm w-full placeholder-gray-600"
-                    />
-                </div>
+                {/* Qidiruv: lg+ da maydon, kichik ekranda ikonka + to'liq ekran oyna */}
+                <HeaderSearch isAdmin={user?.username === 'username'} />
             </div>
 
             {/* Right */}
             <div className="flex items-center gap-3 sm:gap-6">
                 {/* Daily XP */}
-                <div className="flex items-center gap-1 sm:gap-1.5 bg-green-950 border border-green-900 text-green-400 text-xs sm:text-sm font-semibold px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg">
+                <div className="flex items-center gap-1 sm:gap-1.5 bg-green-950 border border-green-900 text-green-400 text-xs sm:text-sm font-semibold px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg whitespace-nowrap shrink-0">
                     <Zap size={12} />
                     +{dailyXp} XP
                 </div>
@@ -99,7 +92,7 @@ export default function Header({ onToggle }) {
                     <div className="hidden sm:block text-right">
                         <p className="text-white text-sm font-semibold m-0 leading-tight">{username}</p>
                         <div className="flex items-center gap-2 mt-0.5">
-                            <span className="text-green-400 text-xs">Lv {level}</span>
+                            <span className="text-green-400 text-xs whitespace-nowrap">Lv {level}</span>
                             <div className="w-12 lg:w-16 h-1 bg-gray-700 rounded-full overflow-hidden">
                                 <div className="h-full bg-green-400 rounded-full" style={{ width: `${percent}%` }} />
                             </div>

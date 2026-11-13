@@ -1,24 +1,39 @@
+
 import mongoose from 'mongoose';
 
-const mongoUri = `mongodb+srv://umidjoon:hkx33b@28quiz.bevrzgr.mongodb.net/?appName=28quiz`;
+const mongoUri = process.env.MONGODB_URI;
 
-// Cache connection across serverless invocations using global scope
+// MongoDB ulanishini cache qilish
 let cached = global._mongooseCache;
+
 if (!cached) {
-    cached = global._mongooseCache = { conn: null, promise: null };
+    cached = global._mongooseCache = {
+        conn: null,
+        promise: null,
+    };
 }
 
 export async function connectDB() {
-    if (cached.conn) return cached.conn;
+    if (cached.conn) {
+        return cached.conn;
+    }
+
+    if (!mongoUri) {
+        throw new Error('MONGODB_URI topilmadi. .env.local faylini tekshiring.');
+    }
 
     if (!cached.promise) {
         cached.promise = mongoose.connect(mongoUri, {
             bufferCommands: false,
-            maxPoolSize: 10,
-            serverSelectionTimeoutMS: 8000,
-            socketTimeoutMS: 20000,
-            connectTimeoutMS: 8000,
-        }).then(m => m);
+            maxPoolSize: 20,
+            minPoolSize: 5,
+            serverSelectionTimeoutMS: 5000,
+            socketTimeoutMS: 30000,
+            connectTimeoutMS: 5000,
+            heartbeatFrequencyMS: 10000,
+            retryWrites: true,
+            retryReads: true,
+        });
     }
 
     try {

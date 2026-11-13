@@ -9,16 +9,20 @@ import Cookies from "js-cookie";
 
 export default function RootLayout({children}) {
     const [isExpanded, setIsExpanded] = useState(true);
-    const [isAuthenticated, setIsAuthenticated] = useState(() => {
-        if (typeof window === 'undefined') return false;
-        return !!Cookies.get('session_token');
-    });
+    // Server va client birinchi renderda bir xil (false) bo'lishi kerak,
+    // cookie faqat useEffect ichida (mount'dan keyin) o'qiladi — aks holda hydration xatosi.
+    const [isAuthenticated, setIsAuthenticated] = useState(false);
     const pathname = usePathname();
     const router = useRouter();
 
     useEffect(() => {
         setIsAuthenticated(!!Cookies.get('session_token'));
     }, [pathname]);
+
+    // Planshetda (768–1023px) sidebar yig'iq holda boshlanadi — kontentga joy qoladi
+    useEffect(() => {
+        if (window.innerWidth < 1024) setIsExpanded(false);
+    }, []);
 
     // Pages that don't require authentication
     const publicPages = ['/login', '/signup'];

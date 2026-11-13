@@ -27,7 +27,7 @@ export async function GET(req) {
 
         const [users, total] = await Promise.all([
             User.find(baseFilter)
-                .select('-password -activity -dailyXpDate')
+                .select('-password -activity -dailyXpDate -dailyChallenges')
                 .sort({ xp: -1, joinedAt: 1 })
                 .skip(skip)
                 .limit(limit)
@@ -35,7 +35,7 @@ export async function GET(req) {
             User.countDocuments(baseFilter),
         ]);
 
-        // Compute current user's rank (exclude hidden users from count too)
+        // Compute current user's rank
         let myRank = null;
         if (session?.username && !HIDDEN_USERS.includes(session.username)) {
             const me = await User.findOne({ username: session.username }).select('xp joinedAt').lean();

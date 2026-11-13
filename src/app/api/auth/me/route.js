@@ -31,7 +31,7 @@ export async function GET(req) {
             return new Response(JSON.stringify({ message: 'Not authenticated' }), { status: 401 });
         }
 
-        const user = await User.findById(session.id).select('-password');
+        const user = await User.findById(session.id).select('-password').lean();
 
         if (!user) {
             return new Response(JSON.stringify({ message: 'User not found' }), { status: 404 });
@@ -44,17 +44,20 @@ export async function GET(req) {
             const xpDay = new Date(user.dailyXpDate);
             xpDay.setHours(0, 0, 0, 0);
             if (xpDay.getTime() !== today.getTime()) {
+                // lean() returns plain object - use updateOne instead of save()
+                await User.updateOne(
+                    { _id: session.id },
+                    { $set: { dailyXp: 0, dailyXpDate: null } }
+                );
                 user.dailyXp = 0;
                 user.dailyXpDate = null;
-                await user.save();
             }
         }
 
-        const userObj = user.toObject();
-        if (userObj.dailyXp == null) userObj.dailyXp = 0;
-        if (userObj.activity == null) userObj.activity = [];
+        if (user.dailyXp == null) user.dailyXp = 0;
+        if (user.activity == null) user.activity = [];
 
-        return new Response(JSON.stringify({ user: userObj }), { status: 200 });
+        return new Response(JSON.stringify({ user }), { status: 200 });
 
     } catch (error) {
         console.error('Get current user error:', error);

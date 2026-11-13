@@ -12,14 +12,18 @@ export async function GET(req) {
             return new Response(JSON.stringify({ message: 'Foydalanuvchi IDsi kerak!' }), { status: 400 });
         }
 
-        const user = await User.findById(userId);
+        const user = await User.findById(userId).select('xp questionsSolved dayStreak joinedAt').lean();
         if (!user) {
             return new Response(JSON.stringify({ message: 'Foydalanuvchi topilmadi!' }), { status: 404 });
         }
 
-        // Get all users sorted by XP for ranking
-        const allUsers = await User.find().sort({ xp: -1 });
-        const rank = allUsers.findIndex(u => u._id.toString() === userId) + 1;
+        // Rank ni barcha userlarni yuklamasdan hisoblash
+        const xp = user.xp ?? 0;
+        const [above, tiedBefore] = await Promise.all([
+            User.countDocuments({ xp: { $gt: xp } }),
+            User.countDocuments({ xp, joinedAt: { $lt: user.joinedAt } }),
+        ]);
+        const rank = above + tiedBefore + 1;
 
         const dashboardData = {
             totalXp: user.xp,

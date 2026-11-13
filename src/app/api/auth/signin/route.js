@@ -11,7 +11,7 @@ export async function POST(req) {
             return new Response(JSON.stringify({ message: 'Username va parol majburiy' }), { status: 400 });
         }
 
-        const user = await User.findOne({ username });
+        const user = await User.findOne({ username }).lean();
         if (!user) {
             return new Response(JSON.stringify({ message: 'Username yoki parol xato' }), { status: 401 });
         }
@@ -23,7 +23,7 @@ export async function POST(req) {
 
         // Exclude password from response and ensure daily fields exist so the
         // client cookie always contains predictable values.
-        const userResponse = user.toObject();
+        const userResponse = { ...user };
         delete userResponse.password;
         if (userResponse.dailyXp == null) userResponse.dailyXp = 0;
         if (userResponse.dailyXpDate == null) userResponse.dailyXpDate = null;
