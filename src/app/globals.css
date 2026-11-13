@@ -6,3 +6,13 @@
     .no-scrollbar::-webkit-scrollbar { display: none; }
     .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 }
+
+/* Netlify badge ni to'liq yashirish */
+iframe[id*="netlify"],
+div:has(> a[href*="netlify.com"]),
+a[href*="netlify.com"] {
+    display: none !important;
+    visibility: hidden !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
+}
