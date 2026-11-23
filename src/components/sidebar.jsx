@@ -10,11 +10,13 @@ import {
     Zap,
     Flame, HomeIcon, TrophyIcon, PlusIcon, BookOpenIcon, UserIcon,
     Shield as ShieldIcon,
+    GraduationCap,
 } from 'lucide-react';
 
 const menuItems = [
     { key: 'dashboard', label: 'Dashboard', icon: HomeIcon, route: '/dashboard' },
     { key: 'quiz', label: 'Solve Quiz', icon: BookOpenIcon, route: '/quiz' },
+    { key: 'exam', label: 'Exam', icon: GraduationCap, route: '/exam' },
     { key: 'leaderboard', label: 'Leaderboard', icon: TrophyIcon, route: '/leaderboard' },
     { key: 'create', label: "Create Question", icon: PlusIcon, route: '/create' },
     { key: 'admin', label: 'Admin Panel', icon: ShieldIcon, route: '/admin' },

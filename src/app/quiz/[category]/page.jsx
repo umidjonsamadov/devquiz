@@ -282,13 +282,13 @@ export default function QuizCategoryPage() {
     // quiz state
     const [questions, setQuestions] = useState([]);
     const [index, setIndex]         = useState(0);
-    const [selected, setSelected]   = useState(null);
-    const [answered, setAnswered]   = useState(false);
+    const [answers, setAnswers]   = useState([]); // answers[i] = tanlangan variant indeksi yoki null
     const [quizLoading, setQuizLoading] = useState(false);
-    const [showResults, setShowResults] = useState(false);
     const countsRef = useRef({ correct: 0, incorrect: 0, unanswered: 0, xpEarned: 0 });
+    const finishedRef = useRef(false);
     const [timeLeft, setTimeLeft] = useState(null);
     const timerRef = useRef(null);
+    const advanceRef = useRef(() => {});
 
     // check admin
     useEffect(() => {
@@ -329,18 +329,19 @@ export default function QuizCategoryPage() {
     // start quiz
     async function startQuiz() {
         setQuizLoading(true);
+        let qs = [];
         try {
             const res = await fetch(`/api/quizs/${encodeURIComponent(category)}`);
             if (res.ok) {
                 const data = await res.json();
-                setQuestions(data.questions || []);
+                qs = data.questions || [];
             }
         } catch (e) { console.error(e); }
         countsRef.current = { correct: 0, incorrect: 0, unanswered: 0, xpEarned: 0 };
+        finishedRef.current = false;
+        setQuestions(qs);
+        setAnswers(new Array(qs.length).fill(null));
         setIndex(0);
-        setSelected(null);
-        setAnswered(false);
-        setShowResults(false);
         setMode('quiz');
         setQuizLoading(false);
     }
@@ -351,35 +352,39 @@ export default function QuizCategoryPage() {
     const isLastQ    = index === total - 1;
     const progress   = total ? ((index + 1) / total) * 100 : 0;
 
+    const selected = answers[index] ?? null;
+
+    // Natijalar faqat yakunda, javoblar massividan bir marta hisoblanadi
+    const finishQuiz = () => {
+        if (finishedRef.current) return;
+        finishedRef.current = true;
+        clearInterval(timerRef.current);
+
+        const counts = { correct: 0, incorrect: 0, unanswered: 0, xpEarned: 0 };
+        questions.forEach((q, i) => {
+            const a = answers[i];
+            if (a === null || a === undefined) { counts.unanswered += 1; return; }
+            const correct = a === q.correctAnswer;
+            const xpReward = correct ? (q.xpReward || 0) : 0;
+            if (correct) { counts.correct += 1; counts.xpEarned += xpReward; }
+            else counts.incorrect += 1;
+            // fire-and-forget — har bir javob berilgan savol uchun faqat bir marta
+            fetch('/api/user/activity', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ xpReward, correct }),
+            }).catch(() => {});
+        });
+        countsRef.current = counts;
+        setMode('results');
+    };
+
     const handleNext = () => {
         if (!current) return;
-        if (selected === null) {
-            countsRef.current.unanswered += 1;
-            if (index + 1 < total) { setIndex(index + 1); }
-            else { setMode('results'); }
-            return;
-        }
-        const correct = selected === current.correctAnswer;
-        const xpReward = correct ? (current.xpReward || 0) : 0;
-        if (correct) { countsRef.current.correct += 1; countsRef.current.xpEarned += xpReward; }
-        else countsRef.current.incorrect += 1;
-
-        // fire-and-forget — don't block UI on network round-trip
-        fetch('/api/user/activity', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ xpReward, correct }),
-        }).catch(() => {});
-
-        setAnswered(true);
-        // short flash so user sees correct/wrong, then move immediately
-        setTimeout(() => {
-            setSelected(null);
-            setAnswered(false);
-            if (index + 1 < total) { setIndex(index + 1); }
-            else { setMode('results'); }
-        }, 450);
+        if (index + 1 < total) setIndex(index + 1);
+        else finishQuiz();
     };
+    advanceRef.current = handleNext;
 
     const handleRetry = async () => {
         await startQuiz();
@@ -387,21 +392,19 @@ export default function QuizCategoryPage() {
 
     // timer
     useEffect(() => {
-        if (mode !== 'quiz' || !current || answered) return;
-        const seconds = current.time || 30;
-        setTimeLeft(seconds);
+        if (mode !== 'quiz' || !current) return;
+        let left = current.time || 30;
+        setTimeLeft(left);
         timerRef.current = setInterval(() => {
-            setTimeLeft(prev => {
-                if (prev <= 1) { clearInterval(timerRef.current); handleNext(); return 0; }
-                return prev - 1;
-            });
+            left -= 1;
+            setTimeLeft(left);
+            if (left <= 0) {
+                clearInterval(timerRef.current);
+                advanceRef.current(); // eng yangi javob bilan
+            }
         }, 1000);
         return () => clearInterval(timerRef.current);
     }, [index, questions, mode]);
-
-    useEffect(() => {
-        if (answered) clearInterval(timerRef.current);
-    }, [answered]);
 
     // ── stats ─────────────────────────────────────────────────
     const dc = useMemo(() => {
@@ -505,40 +508,30 @@ export default function QuizCategoryPage() {
                         <div className="flex flex-col gap-2.5">
                             {current.options.map((opt, i) => {
                                 const isSelected   = selected === i;
-                                const isCorrectOpt = answered && i === current.correctAnswer;
-                                const isWrong      = answered && isSelected && !isCorrectOpt;
-
                                 let container = 'border-gray-800 bg-gray-900 hover:border-gray-600 hover:bg-gray-800/80 cursor-pointer';
-                                if (isCorrectOpt) container = 'border-green-500 bg-green-900/20 cursor-default';
-                                else if (isWrong) container = 'border-red-500 bg-red-900/20 cursor-default';
-                                else if (isSelected) container = 'border-green-500/60 bg-green-900/10 cursor-pointer';
+                                if (isSelected) container = 'border-green-500/60 bg-green-900/10 cursor-pointer';
 
                                 let badge = 'bg-gray-800 text-gray-400';
-                                if (isCorrectOpt) badge = 'bg-green-500 text-white';
-                                else if (isWrong) badge = 'bg-red-500 text-white';
-                                else if (isSelected) badge = 'bg-green-600 text-white';
+                                if (isSelected) badge = 'bg-green-600 text-white';
 
                                 let textCls = 'text-gray-200';
-                                if (isCorrectOpt) textCls = 'text-green-300';
-                                else if (isWrong) textCls = 'text-red-300';
-                                else if (isSelected) textCls = 'text-white';
+                                if (isSelected) textCls = 'text-white';
 
-                                const icon = isCorrectOpt ? <Check className="w-4 h-4" />
-                                    : isWrong ? <X className="w-4 h-4" />
-                                    : isSelected ? <Check className="w-4 h-4" />
+                                const icon = isSelected ? <Check className="w-4 h-4" />
                                     : <span className="text-sm font-bold">{String.fromCharCode(65 + i)}</span>;
 
                                 return (
                                     <button
                                         key={i}
-                                        onClick={() => !answered && setSelected(i)}
-                                        disabled={answered}
+                                        onClick={() => setAnswers(prev => {
+                                            const next = [...prev];
+                                            next[index] = i;
+                                            return next;
+                                        })}
                                         className={`group flex items-center gap-3 rounded-xl border-2 px-3 sm:px-5 py-3 sm:py-4 text-left transition-all duration-200 ${container}`}
                                     >
                                         <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-xl transition-all duration-200 ${badge}`}>{icon}</span>
                                         <span className={`font-medium text-sm sm:text-base leading-relaxed transition-colors duration-200 ${textCls}`}>{opt}</span>
-                                        {isCorrectOpt && <span className="ml-auto text-xs font-semibold text-green-400 shrink-0">To&apos;g&apos;ri!</span>}
-                                        {isWrong && <span className="ml-auto text-xs font-semibold text-red-400 shrink-0">Noto&apos;g&apos;ri</span>}
                                     </button>
                                 );
                             })}
@@ -549,8 +542,6 @@ export default function QuizCategoryPage() {
                                 onClick={() => {
                                     if (index > 0) {
                                         setIndex(index - 1);
-                                        setSelected(null);
-                                        setAnswered(false);
                                     } else {
                                         setMode('library');
                                     }

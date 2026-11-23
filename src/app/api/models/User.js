@@ -115,4 +115,10 @@ export const User = mongoose.model('User', userSchema);
 
 // Drop the old non-sparse email index so Mongoose recreates it as sparse.
 // Runs once per cold start; errors are silently ignored.
-User.collection.dropIndex('email_1').then(() => User.syncIndexes()).catch(() => {});
+// try/catch kerak: bufferCommands=false bo'lganda ulanish tayyor bo'lmasa chaqiruv
+// sinxron xato tashlaydi va `User` ni import qilgan har bir marshrut 500 qaytaradi.
+try {
+    User.collection.dropIndex('email_1').then(() => User.syncIndexes()).catch(() => {});
+} catch {
+    // ulanish hali tayyor emas, keyingi ishga tushishda urinamiz
+}

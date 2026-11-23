@@ -1,17 +1,7 @@
 import { connectDB } from '../../config/mongodb.js';
 import { Question } from '../../models/Question.js';
 
-function parseSession(cookieHeader) {
-    if (!cookieHeader) return null;
-    const part = cookieHeader.split(';').map(p => p.trim()).find(p => p.startsWith('session_token='));
-    if (!part) return null;
-    try { return JSON.parse(decodeURIComponent(part.split('=')[1] || '')); } catch { return null; }
-}
-
-function isAdmin(req) {
-    const session = parseSession(req.headers.get('cookie'));
-    return session?.username === 'ad';
-}
+import { isAdmin } from '../../config/adminAuth.js';
 
 export async function PUT(req, { params }) {
     if (!isAdmin(req)) {

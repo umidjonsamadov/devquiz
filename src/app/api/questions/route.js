@@ -1,28 +1,13 @@
 import { connectDB } from '../config/mongodb.js';
 import { Question } from '../models/Question.js';
 
-// only admin users may create questions; we check username === 'ad' as before.
-function parseSessionFromCookie(cookieHeader) {
-    if (!cookieHeader) return null;
-    const parts = cookieHeader.split(';').map(p => p.trim());
-    const tokenPart = parts.find(p => p.startsWith('session_token='));
-    if (!tokenPart) return null;
-    let raw = tokenPart.split('=')[1] || '';
-    try {
-        raw = decodeURIComponent(raw);
-        return JSON.parse(raw);
-    } catch (e) {
-        try { return JSON.parse(raw); } catch { return null; }
-    }
-}
+import { isAdmin } from '../config/adminAuth.js';
 
 export async function POST(req) {
     try {
         await connectDB();
 
-        const cookie = req.headers.get('cookie');
-        const session = parseSessionFromCookie(cookie);
-        if (!session || session.username !== 'username') {
+        if (!isAdmin(req)) {
             return new Response(JSON.stringify({ message: 'Forbidden' }), { status: 403 });
         }
 

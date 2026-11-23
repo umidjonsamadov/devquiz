@@ -2,35 +2,16 @@
 
 import { useEffect, useState, useMemo } from 'react';
 import Link from 'next/link';
-import {
-    BookOpen, Code, Globe, Cpu, Database, Layout,
-    Zap, Shield, Terminal, FileCode, Layers, Box,
-    Search, X, ChevronRight, Library,
-} from 'lucide-react';
-
-function getCategoryStyle(name) {
-    const n = name.toLowerCase();
-    if (n.includes('python'))                           return { icon: Terminal,  color: 'text-blue-400',   bg: 'bg-blue-500/10',    border: 'border-blue-500/20',    glow: 'hover:border-blue-500/40',   accent: 'from-blue-500/10'   };
-    if (n.includes('javascript') || n.includes('js'))  return { icon: Code,      color: 'text-yellow-400', bg: 'bg-yellow-500/10',  border: 'border-yellow-500/20',  glow: 'hover:border-yellow-500/40', accent: 'from-yellow-500/10' };
-    if (n.includes('react'))                            return { icon: Layers,    color: 'text-cyan-400',   bg: 'bg-cyan-500/10',    border: 'border-cyan-500/20',    glow: 'hover:border-cyan-500/40',   accent: 'from-cyan-500/10'   };
-    if (n.includes('css'))                              return { icon: Layout,    color: 'text-pink-400',   bg: 'bg-pink-500/10',    border: 'border-pink-500/20',    glow: 'hover:border-pink-500/40',   accent: 'from-pink-500/10'   };
-    if (n.includes('html'))                             return { icon: Globe,     color: 'text-orange-400', bg: 'bg-orange-500/10',  border: 'border-orange-500/20',  glow: 'hover:border-orange-500/40', accent: 'from-orange-500/10' };
-    if (n.includes('sql') || n.includes('database'))   return { icon: Database,  color: 'text-purple-400', bg: 'bg-purple-500/10',  border: 'border-purple-500/20',  glow: 'hover:border-purple-500/40', accent: 'from-purple-500/10' };
-    if (n.includes('typescript') || n.includes('ts'))  return { icon: FileCode,  color: 'text-sky-400',    bg: 'bg-sky-500/10',     border: 'border-sky-500/20',     glow: 'hover:border-sky-500/40',    accent: 'from-sky-500/10'    };
-    if (n.includes('next'))                             return { icon: Zap,       color: 'text-white',      bg: 'bg-gray-500/10',    border: 'border-gray-500/20',    glow: 'hover:border-gray-500/40',   accent: 'from-gray-500/10'   };
-    if (n.includes('security') || n.includes('cyber')) return { icon: Shield,    color: 'text-red-400',    bg: 'bg-red-500/10',     border: 'border-red-500/20',     glow: 'hover:border-red-500/40',    accent: 'from-red-500/10'    };
-    if (n.includes('algorithm'))                        return { icon: Cpu,       color: 'text-green-400',  bg: 'bg-green-500/10',   border: 'border-green-500/20',   glow: 'hover:border-green-500/40',  accent: 'from-green-500/10'  };
-    if (n.includes('docker') || n.includes('devops'))  return { icon: Box,       color: 'text-teal-400',   bg: 'bg-teal-500/10',    border: 'border-teal-500/20',    glow: 'hover:border-teal-500/40',   accent: 'from-teal-500/10'   };
-    return                                               { icon: BookOpen,   color: 'text-green-400',  bg: 'bg-green-500/10',   border: 'border-green-500/20',   glow: 'hover:border-green-500/40',  accent: 'from-green-500/10'  };
-}
+import { Search, X, ChevronRight, Library, Zap } from 'lucide-react';
+import { getStyle } from '../../lib/categoryStyle';
 
 function LibraryCard({ lib }) {
-    const { icon: Icon, color, bg, border, glow, accent } = getCategoryStyle(lib.category);
+    const { Icon, color, bg, border, glow, accent } = getStyle(lib);
     const dc = lib.diffCounts || { Easy: 0, Medium: 0, Hard: 0 };
 
     return (
         <Link
-            href={`/quiz/${encodeURIComponent(lib.category)}`}
+            href={`/quiz/${encodeURIComponent(lib.name)}`}
             className={`group relative flex flex-col bg-gray-900 border ${border} ${glow} rounded-2xl overflow-hidden
                 transition-all duration-300 hover:-translate-y-1 hover:shadow-2xl`}
         >
@@ -51,7 +32,7 @@ function LibraryCard({ lib }) {
 
                 {/* Name */}
                 <h2 className={`text-lg font-extrabold text-white mb-1 group-hover:${color} transition-colors duration-200`}>
-                    {lib.category}
+                    {lib.name}
                 </h2>
 
                 {/* Question count */}
@@ -106,9 +87,9 @@ export default function QuizLibraryPage() {
     const [diffFilter, setDiffFilter] = useState('All');
 
     useEffect(() => {
-        fetch('/api/quizs')
+        fetch('/api/categories')
             .then(r => r.ok ? r.json() : null)
-            .then(d => { if (d) setLibs(d.categories || []); })
+            .then(d => { if (d) setLibs((d.categories || []).filter(c => c.count > 0)); })
             .catch(console.error)
             .finally(() => setLoading(false));
     }, []);
@@ -116,8 +97,8 @@ export default function QuizLibraryPage() {
     const filtered = useMemo(() => {
         let list = [...libs];
         if (diffFilter !== 'All') list = list.filter(l => l.difficulty === diffFilter);
-        if (search.trim()) list = list.filter(l => l.category.toLowerCase().includes(search.trim().toLowerCase()));
-        return list.sort((a, b) => a.category.localeCompare(b.category));
+        if (search.trim()) list = list.filter(l => l.name.toLowerCase().includes(search.trim().toLowerCase()));
+        return list.sort((a, b) => a.name.localeCompare(b.name));
     }, [libs, diffFilter, search]);
 
     const totalQuestions = libs.reduce((s, l) => s + l.count, 0);
@@ -230,7 +211,7 @@ export default function QuizLibraryPage() {
                         </p>
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                             {filtered.map(lib => (
-                                <LibraryCard key={lib.category} lib={lib} />
+                                <LibraryCard key={lib._id} lib={lib} />
                             ))}
                         </div>
                     </>
