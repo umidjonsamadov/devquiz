@@ -28,6 +28,7 @@ import {
     XCircle,
     AlertTriangle,
 } from 'lucide-react';
+import ExamRankingAdmin from '../../components/ExamRankingAdmin';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -657,6 +658,9 @@ export default function AdminPage() {
                     <TopUsers users={top5} loading={statsLoading} />
                 </div>
             </div>
+
+            {/* ── Exam ranking ────────────────────────────────────────── */}
+            <ExamRankingAdmin />
 
             {/* ── User Management ─────────────────────────────────────── */}
             <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">

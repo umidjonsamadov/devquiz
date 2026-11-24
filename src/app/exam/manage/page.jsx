@@ -6,6 +6,7 @@ import {
     Plus, Trash2, Pencil, Save, ArrowLeft, BarChart3, Code2, ListChecks, Clock, Trophy,
     AlertCircle, CheckCircle2, RotateCcw, Eye, EyeOff,
 } from 'lucide-react';
+import ExamResultsAdmin from '../../../components/ExamResultsAdmin';
 
 const emptyTest = () => ({ type: 'test', text: '', points: 1, options: ['', '', '', ''], correctAnswer: 0 });
 const STARTER = {
@@ -150,7 +151,7 @@ export default function ExamManagePage() {
     const openResults = async (e) => {
         const d = await fetch(`/api/exams/${e._id}/attempt`).then(r => r.json());
         const full = await fetch(`/api/exams/${e._id}`).then(r => r.json());
-        setResults({ exam: full.exam, attempts: d.attempts || [] });
+        setResults({ exam: full.exam, attempts: (d.attempts || []).filter(a => a.username !== 'username') });
         setOpenAttempt(null); setView('results');
     };
 
@@ -309,30 +310,18 @@ export default function ExamManagePage() {
 
             {/* ── NATIJALAR ── */}
             {view === 'results' && results.exam && (
-                <div className="max-w-4xl mx-auto">
+                                <div className="max-w-5xl mx-auto">
                     <button onClick={() => setView('list')} className="flex items-center gap-1 text-gray-400 hover:text-white text-sm mb-4"><ArrowLeft size={15} /> Orqaga</button>
                     <h1 className="text-xl font-extrabold text-white mb-1">{results.exam.title}: natijalar</h1>
                     <p className="text-gray-500 text-sm mb-5">{results.attempts.length} ta urinish</p>
-                    <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
-                        {results.attempts.length === 0 && <p className="text-center text-gray-500 text-sm py-10">Hali hech kim topshirmagan</p>}
-                        {results.attempts.map(a => (
-                            <div key={a._id} className="border-b border-gray-800 last:border-0">
-                                <div className="flex flex-wrap items-center gap-3 px-4 py-3 text-sm">
-                                    <span className="text-white font-semibold flex-1 min-w-[120px]">{a.username}</span>
-                                    <span className={`text-xs px-2 py-0.5 rounded-lg border ${a.status === 'finished' ? 'border-green-800 text-green-400' : 'border-yellow-800 text-yellow-400'}`}>
-                                        {a.status === 'finished' ? ({ time: 'vaqt tugadi', violations: 'qoidabuzarlik', submitted: 'topshirdi' }[a.finishReason] || 'tugadi') : 'jarayonda'}
-                                    </span>
-                                    <span className={`text-xs ${a.violations ? 'text-red-400' : 'text-gray-600'}`}>⚠ {a.violations}</span>
-                                    <span className="text-green-400 font-bold w-20 text-right">{a.score} / {a.maxScore}</span>
-                                    <button onClick={() => setOpenAttempt(openAttempt === a._id ? null : a._id)} className="text-blue-300 text-xs hover:underline">Javoblar</button>
-                                    <button onClick={() => allowRetake(a)} title="Qayta topshirishga ruxsat" className="text-gray-500 hover:text-yellow-400"><RotateCcw size={14} /></button>
-                                </div>
-                                {openAttempt === a._id && (
-                                    <AttemptAnswers a={a} exam={results.exam} say={say} onSaved={() => openResults(results.exam)} />
-                                )}
-                            </div>
-                        ))}
-                    </div>
+                    <ExamResultsAdmin
+                        exam={results.exam}
+                        attempts={results.attempts}
+                        openId={openAttempt}
+                        setOpenId={setOpenAttempt}
+                        onRetake={allowRetake}
+                        renderAnswers={(a) => <AttemptAnswers a={a} exam={results.exam} say={say} onSaved={() => openResults(results.exam)} />}
+                    />
                 </div>
             )}
         </div>
