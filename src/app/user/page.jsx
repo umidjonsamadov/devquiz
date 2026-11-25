@@ -232,7 +232,7 @@ export default function UserProfile() {
                                 </div>
                             </Ring>
                             <div
-                                className="absolute -bottom-1 left-1/2 -translate-x-1/2 text-[11px] font-extrabold px-2.5 py-0.5 rounded-full border-2 border-gray-900 text-gray-950"
+                                className="absolute -bottom-1 left-1/2 -translate-x-1/2 whitespace-nowrap text-[11px] font-extrabold px-2.5 py-0.5 rounded-full border-2 border-gray-900 text-gray-950"
                                 style={{ background: theme.a }}
                             >
                                 LV {level}
