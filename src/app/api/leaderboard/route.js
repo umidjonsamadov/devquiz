@@ -27,7 +27,7 @@ export async function GET(req) {
 
         const [users, total] = await Promise.all([
             User.find(baseFilter)
-                .select('-password -activity -dailyXpDate -dailyChallenges')
+                .select('-password -activity -dailyXpDate -dailyChallenges -timeLog -claimedTimeRewards')
                 .sort({ xp: -1, joinedAt: 1 })
                 .skip(skip)
                 .limit(limit)
@@ -49,8 +49,19 @@ export async function GET(req) {
             }
         }
 
+        // Og'ir base64 o'rniga ommaviy avatar URL beramiz (?v= — rasm o'zgarsa keshni yangilaydi)
+        const leaderboard = users.map(u => {
+            const raw = u.avatarUrl;
+            return {
+                ...u,
+                avatarUrl: raw
+                    ? `/api/avatar/${encodeURIComponent(u.username)}?v=${raw.length}-${raw.slice(-12).replace(/[^a-zA-Z0-9]/g, '')}`
+                    : null,
+            };
+        });
+
         return new Response(
-            JSON.stringify({ leaderboard: users, total, page, limit, myRank }),
+            JSON.stringify({ leaderboard, total, page, limit, myRank }),
             { status: 200 }
         );
     } catch (error) {

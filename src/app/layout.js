@@ -2,6 +2,7 @@
 import "./globals.css";
 import Sidebar from "@/components/sidebar";
 import Header from "@/components/header";
+import PresenceTracker from "@/components/presenceTracker";
 import {useState, useEffect} from "react";
 import { usePathname, useRouter } from "next/navigation";
 import Cookies from "js-cookie";
@@ -48,6 +49,7 @@ export default function RootLayout({children}) {
             />
         </head>
         <body className="flex bg-gray-950">
+        {showLayout && <PresenceTracker />}
         {showLayout && <Sidebar isExpanded={isExpanded}/>}
         <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
             {showLayout && <Header onToggle={() => setIsExpanded(!isExpanded)} />}

@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useState } from 'react';
-import { Zap, Trophy, ChevronLeft, ChevronRight, TrendingUp, Users, Target, Star, Lock } from 'lucide-react';
+import { Zap, Trophy, ChevronLeft, ChevronRight, TrendingUp, Users, Target, Star, Lock, Clock } from 'lucide-react';
 import Link from 'next/link';
+import { formatDuration } from '../../lib/formatDuration';
 
 const PER_PAGE = 10;
 
@@ -76,8 +77,8 @@ function PodiumCard({ u, cfg, isYou, visible, meAvatarUrl }) {
                 className={`relative ${cfg.size} rounded-2xl bg-gradient-to-br ${cfg.gradientFrom} ${cfg.gradientTo} border ${cfg.borderColor} ${cfg.ring} flex items-center justify-center font-extrabold ${cfg.textColor} mb-2`}
                 style={cfg.rank === 1 ? { boxShadow: '0 0 32px rgba(250,204,21,0.2)' } : {}}
             >
-                {isYou && meAvatarUrl
-                    ? <img src={meAvatarUrl} alt={u?.username} className="w-full h-full object-cover rounded-2xl" />
+                {(isYou ? meAvatarUrl : u?.avatarUrl)
+                    ? <img src={isYou ? meAvatarUrl : u.avatarUrl} alt={u?.username} className="w-full h-full object-cover rounded-2xl" />
                     : (u?.username || 'U').charAt(0).toUpperCase()
                 }
                 {cfg.rank === 1 && (
@@ -92,7 +93,10 @@ function PodiumCard({ u, cfg, isYou, visible, meAvatarUrl }) {
                 {u?.username || '—'}
             </p>
             {isYou && <span className="text-xs text-green-500 mb-0.5">● Siz</span>}
-            <p className="text-xs text-gray-500 mb-1.5">Lv {level}</p>
+            <p className="text-xs text-gray-500 mb-0.5">Lv {level}</p>
+            <p className="flex items-center gap-0.5 text-[11px] text-gray-500 mb-1.5">
+                <Clock size={10} /> {formatDuration(u?.timeSpent)}
+            </p>
 
             <div className={`flex items-center gap-0.5 text-xs sm:text-sm font-bold mb-2 ${cfg.textColor}`}>
                 <Zap size={11} />
@@ -184,8 +188,8 @@ function UserRow({ u, rank, isYou, meAvatarUrl }) {
             <div className={`w-8 h-8 rounded-xl shrink-0 flex items-center justify-center text-xs font-extrabold overflow-hidden
                 ${isTop3 ? s.avatar : isYou ? 'bg-green-900/40 border border-green-700 text-green-400' : 'bg-gray-800 text-white'}`}
             >
-                {isYou && meAvatarUrl
-                    ? <img src={meAvatarUrl} alt={u.username} className="w-full h-full object-cover" />
+                {(isYou ? meAvatarUrl : u.avatarUrl)
+                    ? <img src={isYou ? meAvatarUrl : u.avatarUrl} alt={u.username} className="w-full h-full object-cover" />
                     : (u.username || 'U').charAt(0).toUpperCase()
                 }
             </div>
@@ -201,7 +205,18 @@ function UserRow({ u, rank, isYou, meAvatarUrl }) {
                         </span>
                     )}
                 </div>
-                <span className="text-xs text-gray-600">Lv {level}</span>
+                <span className="text-xs text-gray-600">
+                    Lv {level}
+                    <span className="md:hidden"> · {formatDuration(u.timeSpent)}</span>
+                </span>
+            </div>
+
+            <div className="hidden md:flex flex-col items-end shrink-0 w-20">
+                <div className="flex items-center gap-1">
+                    <Clock size={10} className="text-gray-600" />
+                    <span className="text-sm font-semibold text-white whitespace-nowrap">{formatDuration(u.timeSpent)}</span>
+                </div>
+                <span className="text-xs text-gray-600">vaqt</span>
             </div>
 
             <div className="hidden sm:flex flex-col items-end shrink-0 w-14">
@@ -417,6 +432,13 @@ export default function LeaderboardPage() {
                             <span className="text-white font-bold text-sm">{(me.xp || 0).toLocaleString()} XP</span>
                         </div>
                     )}
+                    {me && (
+                        <div className="flex items-center gap-1.5 bg-gray-900 border border-gray-800 rounded-xl px-3 py-1.5">
+                            <Clock size={13} className="text-purple-400" />
+                            <span className="text-white font-bold text-sm">{formatDuration(me.timeSpent)}</span>
+                            <span className="text-gray-500 text-xs">saytda</span>
+                        </div>
+                    )}
                 </div>
 
                 {/* Podium */}
@@ -432,9 +454,12 @@ export default function LeaderboardPage() {
 
                 {/* Table */}
                 <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
-                    <div className="flex items-center gap-2 py-2.5 border-b border-gray-800 px-3 sm:px-5">
-                        <div className="w-6 sm:w-8 shrink-0" />
-                        <p className="flex-1 text-xs font-semibold text-gray-600 uppercase tracking-wider pl-10">Foydalanuvchi</p>
+                    {/* Sarlavha qatorlar bilan bir xil o'lcham: tashqi p-2 + border 1px + qator padding */}
+                    <div className="flex items-center gap-2 sm:gap-4 py-2.5 border-b border-gray-800 px-[17px] sm:px-[29px]">
+                        <div className="w-6 sm:w-8 shrink-0 text-center text-xs font-semibold text-gray-600">#</div>
+                        <div className="w-8 shrink-0" />
+                        <p className="flex-1 min-w-0 text-xs font-semibold text-gray-600 uppercase tracking-wider">Foydalanuvchi</p>
+                        <p className="hidden md:block w-20 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider shrink-0">Vaqt</p>
                         <p className="hidden sm:block w-14 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider shrink-0">Savol</p>
                         <p className="hidden lg:block w-14 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider shrink-0">Aniqlik</p>
                         <p className="text-right text-xs font-semibold text-gray-600 uppercase tracking-wider shrink-0 min-w-[60px]">XP</p>

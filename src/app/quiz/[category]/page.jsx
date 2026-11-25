@@ -361,6 +361,7 @@ export default function QuizCategoryPage() {
         clearInterval(timerRef.current);
 
         const counts = { correct: 0, incorrect: 0, unanswered: 0, xpEarned: 0 };
+        const activityPayloads = [];
         questions.forEach((q, i) => {
             const a = answers[i];
             if (a === null || a === undefined) { counts.unanswered += 1; return; }
@@ -368,13 +369,22 @@ export default function QuizCategoryPage() {
             const xpReward = correct ? (q.xpReward || 0) : 0;
             if (correct) { counts.correct += 1; counts.xpEarned += xpReward; }
             else counts.incorrect += 1;
-            // fire-and-forget — har bir javob berilgan savol uchun faqat bir marta
-            fetch('/api/user/activity', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ xpReward, correct }),
-            }).catch(() => {});
+            activityPayloads.push({ xpReward, correct });
         });
+        // Ketma-ket yuboramiz (parallel so'rovlar bir-birining XP'sini ustidan yozib yuborardi),
+        // tugagach header'ga XP yangilanganini xabar beramiz.
+        (async () => {
+            for (const payload of activityPayloads) {
+                try {
+                    await fetch('/api/user/activity', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload),
+                    });
+                } catch {}
+            }
+            window.dispatchEvent(new Event('user-updated'));
+        })();
         // admin ko'rishi uchun butun urinishni (javoblari bilan) saqlash
         fetch('/api/user/quiz-attempt', {
             method: 'POST',

@@ -1,8 +1,9 @@
 'use client';
 
-import { Bell, Zap } from 'lucide-react';
+import { Zap } from 'lucide-react';
 import Link from 'next/link';
 import HeaderSearch from './search';
+import NotificationBell from './notificationBell';
 import { useState, useEffect } from 'react';
 
 function getLevelProgress(xp) {
@@ -66,7 +67,7 @@ export default function Header({ onToggle }) {
 
                 {/* Logo text on mobile */}
                 <span className="md:hidden text-white font-bold text-base">
-                    <span className="text-green-400">D</span>MS
+                    <span className="text-green-400">Dev</span>Quiz
                 </span>
 
                 {/* Qidiruv: lg+ da maydon, kichik ekranda ikonka + to'liq ekran oyna */}
@@ -81,11 +82,8 @@ export default function Header({ onToggle }) {
                     +{dailyXp} XP
                 </div>
 
-                {/* Bell — hidden on smallest screens */}
-                <div className="relative cursor-not-allowed hidden sm:block">
-                    <Bell size={18} className="text-gray-400" />
-                    <span className="absolute top-0 right-0 w-1.5 h-1.5 bg-green-400 rounded-full border-2 border-gray-900" />
-                </div>
+                {/* Bildirishnomalar */}
+                <NotificationBell />
 
                 {/* User */}
                 <div className="flex items-center gap-2">

@@ -30,6 +30,7 @@ import {
 } from 'lucide-react';
 import ExamRankingAdmin from '../../components/ExamRankingAdmin';
 import QuizAttemptsAdmin from '../../components/QuizAttemptsAdmin';
+import { formatDuration, isOnlineNow } from '../../lib/formatDuration';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -207,8 +208,10 @@ function TopUsers({ users, loading }) {
                 return (
                     <div key={u._id || i} className="flex items-center gap-3 px-2 py-2 rounded-xl hover:bg-gray-800/50 transition-colors">
                         <span className="text-xs font-bold text-gray-600 w-4 shrink-0">#{i + 1}</span>
-                        <div className="w-8 h-8 rounded-xl bg-green-900/30 border border-green-800/50 flex items-center justify-center text-xs font-extrabold text-green-400 shrink-0">
-                            {(u.username || 'U').charAt(0).toUpperCase()}
+                        <div className="w-8 h-8 rounded-xl bg-green-900/30 border border-green-800/50 flex items-center justify-center text-xs font-extrabold text-green-400 shrink-0 overflow-hidden">
+                            {u.avatarUrl
+                                ? <img src={u.avatarUrl} alt={u.username} className="w-full h-full object-cover" />
+                                : (u.username || 'U').charAt(0).toUpperCase()}
                         </div>
                         <div className="flex-1 min-w-0">
                             <p className="text-sm font-semibold text-white truncate">{u.username}</p>
@@ -255,8 +258,10 @@ function UserDetailModal({ user, onClose, onDelete }) {
                 {/* Header */}
                 <div className="flex items-center justify-between px-5 py-4 border-b border-gray-800 sticky top-0 bg-gray-900 rounded-t-2xl z-10">
                     <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-xl bg-gray-800 border border-gray-700 flex items-center justify-center text-sm font-extrabold text-white">
-                            {(user.username || 'U').charAt(0).toUpperCase()}
+                        <div className="w-10 h-10 rounded-xl bg-gray-800 border border-gray-700 flex items-center justify-center text-sm font-extrabold text-white overflow-hidden">
+                            {user.avatarUrl
+                                ? <img src={user.avatarUrl} alt={user.username} className="w-full h-full object-cover" />
+                                : (user.username || 'U').charAt(0).toUpperCase()}
                         </div>
                         <div>
                             <h2 className="text-white font-bold text-base leading-tight">{user.username}</h2>
@@ -306,7 +311,8 @@ function UserDetailModal({ user, onClose, onDelete }) {
                         {[
                             { icon: Mail, label: 'Email', value: user.email || '—' },
                             { icon: Calendar, label: "Qo'shilgan", value: formatDate(user.joinedAt) },
-                            { icon: Activity, label: "So'nggi faollik", value: getLastActive(user.lastActive) },
+                            { icon: Activity, label: "So'nggi faollik", value: isOnlineNow(user.lastSeen) ? '🟢 Hozir online' : getLastActive(user.lastActive) },
+                            { icon: Clock, label: 'Saytda o\'tkazgan vaqt', value: formatDuration(user.timeSpent) },
                             { icon: XCircle, label: "Noto'g'ri", value: Math.max(0, (user.questionsSolved || 0) - (user.correctAnswers || 0)) },
                         ].map(r => (
                             <div key={r.label} className="flex items-center gap-3 px-3 py-2.5">
@@ -372,8 +378,10 @@ function UserTableRow({ user, rank, isCurrentAdmin, onView }) {
             {/* User */}
             <td className="py-3 px-2">
                 <div className="flex items-center gap-2.5">
-                    <div className="w-8 h-8 rounded-xl bg-gray-800 border border-gray-700 flex items-center justify-center text-xs font-extrabold text-white shrink-0">
-                        {(user.username || 'U').charAt(0).toUpperCase()}
+                    <div className="w-8 h-8 rounded-xl bg-gray-800 border border-gray-700 flex items-center justify-center text-xs font-extrabold text-white shrink-0 overflow-hidden">
+                        {user.avatarUrl
+                            ? <img src={user.avatarUrl} alt={user.username} className="w-full h-full object-cover" />
+                            : (user.username || 'U').charAt(0).toUpperCase()}
                     </div>
                     <div className="min-w-0">
                         <p className="text-sm font-semibold text-white truncate">{user.username}</p>
@@ -420,9 +428,20 @@ function UserTableRow({ user, rank, isCurrentAdmin, onView }) {
 
             {/* Last active */}
             <td className="py-3 px-2 hidden lg:table-cell">
-                <span className={`text-xs ${active ? 'text-green-400' : 'text-gray-500'}`}>
-                    {lastActiveStr}
-                </span>
+                <div className="flex flex-col">
+                    {isOnlineNow(user.lastSeen) ? (
+                        <span className="flex items-center gap-1 text-xs text-green-400 font-semibold">
+                            <span className="w-1.5 h-1.5 bg-green-400 rounded-full animate-pulse" /> Online
+                        </span>
+                    ) : (
+                        <span className={`text-xs ${active ? 'text-green-400' : 'text-gray-500'}`}>
+                            {lastActiveStr}
+                        </span>
+                    )}
+                    <span className="flex items-center gap-1 text-xs text-gray-500 mt-0.5">
+                        <Clock size={10} /> {formatDuration(user.timeSpent)}
+                    </span>
+                </div>
             </td>
 
             {/* Joined */}

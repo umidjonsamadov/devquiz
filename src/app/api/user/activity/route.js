@@ -1,5 +1,9 @@
 import { connectDB } from '../../config/mongodb.js';
 import { User } from '../../models/User.js';
+import { notifyMany } from '../../../../lib/notify.js';
+import {
+    snapshot, achievementNotifications, levelNotification, streakNotifications,
+} from '../../../../lib/achievements.js';
 
 function parseSessionFromCookie(cookieHeader) {
     if (!cookieHeader) return null;
@@ -40,6 +44,10 @@ export async function POST(req) {
 
         const user = await User.findOne({ username: session.username });
         if (!user) return new Response(JSON.stringify({ message: 'User not found' }), { status: 404 });
+
+        // Bildirishnomalar uchun "oldingi" holat
+        const before = snapshot(user);
+        const completedNow = [];
 
         // ── Streak logic ───────────────────────────────────────
         const todayEntryExists = user.activity.some(a => isSameDay(new Date(a.date), today));
@@ -99,6 +107,7 @@ export async function POST(req) {
                 if ((ch.progress || 0) >= ch.target) {
                     ch.completed = true;
                     challengeBonus += ch.xpReward || 0;
+                    completedNow.push({ id: ch.id, title: ch.title, xp: ch.xpReward || 0 });
                 }
             });
         }
@@ -111,6 +120,19 @@ export async function POST(req) {
         }
 
         await user.save();
+
+        // ── Bildirishnomalar: vazifa, level, yutuq, streak ──
+        const after = snapshot(user);
+        await notifyMany(session.username, [
+            ...completedNow.map(c => ({
+                key: `chal:${todayStr}:${c.id}`, type: 'challenge', emoji: '✅', link: '/user',
+                title: `Vazifa bajarildi: ${c.title}`, message: `+${c.xp} XP bonus oldingiz`,
+            })),
+            ...levelNotification(before, after),
+            ...achievementNotifications(before, after),
+            ...streakNotifications(before, after),
+        ]);
+
         const userObj = user.toObject();
         delete userObj.password;
         return new Response(JSON.stringify({ user: userObj, challengeBonus }), { status: 200 });

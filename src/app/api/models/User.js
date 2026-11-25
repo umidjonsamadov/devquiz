@@ -94,6 +94,27 @@ const userSchema = new mongoose.Schema({
         type: String,
         default: null
     },
+    // Saytda o'tkazgan jami vaqt (soniyada) va oxirgi signal vaqti (online holati uchun)
+    timeSpent: {
+        type: Number,
+        default: 0
+    },
+    lastSeen: {
+        type: Date,
+        default: null
+    },
+    // Kunma-kun saytda o'tkazilgan vaqt (kunlik/haftalik/oylik hisob uchun)
+    timeLog: [
+        {
+            date: { type: Date, required: true },
+            seconds: { type: Number, default: 0 }
+        }
+    ],
+    // Olingan vaqt mukofotlari kalitlari: "<davr>:<davr kaliti>:<id>"
+    claimedTimeRewards: {
+        type: [String],
+        default: []
+    },
     joinedAt: {
         type: Date,
         default: Date.now

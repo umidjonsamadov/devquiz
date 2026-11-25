@@ -10,6 +10,7 @@ function computeLevel(xp) {
 }
 import StatsCards from '@/components/dashboard/statsCards';
 import ActivityChart from '@/components/dashboard/activityChart';
+import TimeRewards from '@/components/dashboard/timeRewards';
 
 const difficultyStyle = {
     Easy:   'bg-green-900/40 text-green-400',
@@ -153,6 +154,14 @@ export default function Dashboard() {
                         })) : []}
                     />
 
+                    {/* Saytdagi vaqt + mukofotlar */}
+                    <TimeRewards
+                        onClaimed={(xp) => {
+                            setTodayXp(p => p + xp);
+                            setUser(u => u ? { ...u, totalXp: (u.totalXp || 0) + xp } : u);
+                        }}
+                    />
+
                     {/* Quick Quiz */}
                     <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4 sm:p-6">
                         <div className="flex items-center justify-between mb-4">
@@ -262,8 +271,8 @@ export default function Dashboard() {
                                         <span className="text-gray-500 text-xs font-medium">{idx + 1}</span>
                                     </div>
                                     <div className="w-7 h-7 sm:w-8 sm:h-8 bg-gray-700 rounded-full overflow-hidden flex items-center justify-center text-xs font-bold text-white shrink-0">
-                                        {isYou && user?.avatarUrl
-                                            ? <img src={user.avatarUrl} alt={u.username} className="w-full h-full object-cover" />
+                                        {(isYou ? user?.avatarUrl : u.avatarUrl)
+                                            ? <img src={isYou ? user.avatarUrl : u.avatarUrl} alt={u.username} className="w-full h-full object-cover" />
                                             : (u.username || 'U').charAt(0).toUpperCase()
                                         }
                                     </div>

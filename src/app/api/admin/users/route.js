@@ -79,7 +79,16 @@ export async function GET(req) {
             },
         ]);
 
-        const users = result?.data || [];
+        // Og'ir base64 o'rniga ommaviy avatar URL (?v= rasm o'zgarsa keshni yangilaydi)
+        const users = (result?.data || []).map(u => {
+            const raw = u.avatarUrl;
+            return {
+                ...u,
+                avatarUrl: raw
+                    ? `/api/avatar/${encodeURIComponent(u.username)}?v=${raw.length}-${raw.slice(-12).replace(/[^a-zA-Z0-9]/g, '')}`
+                    : null,
+            };
+        });
         const total = result?.count[0]?.total || 0;
 
         return new Response(

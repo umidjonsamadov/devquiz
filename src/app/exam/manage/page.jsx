@@ -25,6 +25,59 @@ const toPayload = (f) => f;
 
 const inp = 'w-full bg-gray-800 border border-gray-700 text-white text-sm rounded-xl px-3 py-2 focus:outline-none focus:border-green-600';
 
+const LETTERS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
+
+// Variantlar A/B/C/D bilan: to'g'ri yashil, talaba tanlagan noto'g'ri qizil.
+// choice berilmasa (undefined) faqat to'g'ri javob belgilanadi (javoblar kaliti).
+function OptionList({ q, choice }) {
+    const showChoice = choice !== undefined;
+    return (
+        <div className="grid sm:grid-cols-2 gap-1.5">
+            {q.options.map((o, j) => {
+                const right = j === q.correctAnswer;
+                const picked = showChoice && j === choice;
+                const cls = right ? 'border-green-700 bg-green-900/20 text-green-300'
+                    : picked ? 'border-red-700 bg-red-900/20 text-red-300'
+                    : 'border-gray-700 text-gray-400';
+                return (
+                    <div key={j} className={`flex gap-2 px-2.5 py-1.5 rounded-lg border ${cls}`}>
+                        <b className="shrink-0">{LETTERS[j]}.</b>
+                        <span className="flex-1">{o}</span>
+                        {right && <span className="shrink-0 text-[10px] font-bold">✓ to&apos;g&apos;ri</span>}
+                        {picked && !right && <span className="shrink-0 text-[10px] font-bold">✗ tanlagan</span>}
+                        {picked && right && <span className="shrink-0 text-[10px] opacity-70">tanlagan</span>}
+                    </div>
+                );
+            })}
+        </div>
+    );
+}
+
+// Imtihonning to'liq javoblar kaliti (talabalarga bog'liq emas)
+function AnswerKey({ exam }) {
+    const [open, setOpen] = useState(false);
+    return (
+        <div className="bg-gray-900 border border-gray-800 rounded-2xl mb-5 overflow-hidden">
+            <button onClick={() => setOpen(!open)} className="w-full flex items-center justify-between px-4 py-3 text-left">
+                <span className="text-sm font-semibold text-white flex items-center gap-2"><ListChecks size={15} className="text-green-400" /> Imtihon javoblari (to&apos;g&apos;ri javoblar kaliti)</span>
+                <span className="text-xs text-blue-300">{open ? 'Yashirish' : "Ko'rish"}</span>
+            </button>
+            {open && (
+                <div className="px-4 pb-4 space-y-2">
+                    {exam.questions.map((q, i) => (
+                        <div key={q._id} className="bg-gray-800/50 rounded-xl p-3 text-xs">
+                            <p className="text-gray-300 mb-2"><b>{i + 1}.</b> {q.text} <span className="text-gray-500">({q.points} ball)</span></p>
+                            {q.type === 'test'
+                                ? <OptionList q={q} />
+                                : <p className="text-purple-300">Amaliy masala ({q.language === 'python' ? 'Python' : 'JavaScript'}) — admin qo&apos;lda baholaydi</p>}
+                        </div>
+                    ))}
+                </div>
+            )}
+        </div>
+    );
+}
+
 // Talabaning javoblari + amaliy masalalarga qo'lda ball qo'yish
 function AttemptAnswers({ a, exam, say, onSaved }) {
     const codeQs = exam.questions.filter(q => q.type === 'code');
@@ -56,9 +109,12 @@ function AttemptAnswers({ a, exam, say, onSaved }) {
                     <div key={q._id} className="bg-gray-800/50 rounded-xl p-3 text-xs">
                         <p className="text-gray-300 mb-1"><b>{i + 1}.</b> {q.text}</p>
                         {q.type === 'test' ? (
-                            <p className={r?.earned > 0 ? 'text-green-400' : 'text-red-400'}>
-                                Javob: {r?.choice != null ? q.options[r.choice] : '—'} · to&apos;g&apos;ri: {q.options[q.correctAnswer]} · {r?.earned ?? 0}/{q.points}
-                            </p>
+                            <>
+                                <OptionList q={q} choice={r?.choice} />
+                                <p className={`mt-1.5 ${r?.earned > 0 ? 'text-green-400' : 'text-red-400'}`}>
+                                    {r?.choice == null ? "Javob berilmagan" : r.choice === q.correctAnswer ? "To'g'ri" : "Noto'g'ri"} · {r?.earned ?? 0}/{q.points}
+                                </p>
+                            </>
                         ) : (
                             <>
                                 <p className="text-purple-300 mb-1">{q.language === 'python' ? 'Python' : 'JavaScript'}</p>
@@ -314,6 +370,7 @@ export default function ExamManagePage() {
                     <button onClick={() => setView('list')} className="flex items-center gap-1 text-gray-400 hover:text-white text-sm mb-4"><ArrowLeft size={15} /> Orqaga</button>
                     <h1 className="text-xl font-extrabold text-white mb-1">{results.exam.title}: natijalar</h1>
                     <p className="text-gray-500 text-sm mb-5">{results.attempts.length} ta urinish</p>
+                    <AnswerKey exam={results.exam} />
                     <ExamResultsAdmin
                         exam={results.exam}
                         attempts={results.attempts}
