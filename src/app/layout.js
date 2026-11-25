@@ -39,10 +39,8 @@ export default function RootLayout({children}) {
                 dangerouslySetInnerHTML={{
                     __html: `
                           setInterval(() => {
-                            document.querySelectorAll('a[href*="netlify.com"], iframe[src*="netlify"], [class*="netlify"], [id*="netlify"]').forEach(el => {
-                              if (el.innerText.includes('Netlify') || el.id.includes('netlify')) {
-                                el.remove();
-                              }
+                            document.querySelectorAll('netlify-drawer, [data-netlify-drawer], a[href*="netlify.com"], iframe[src*="netlify"], [class*="netlify"], [id*="netlify"]').forEach(el => {
+                              el.remove();
                             });
                           }, 500);
                         `,

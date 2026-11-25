@@ -375,6 +375,15 @@ export default function QuizCategoryPage() {
                 body: JSON.stringify({ xpReward, correct }),
             }).catch(() => {});
         });
+        // admin ko'rishi uchun butun urinishni (javoblari bilan) saqlash
+        fetch('/api/user/quiz-attempt', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                category,
+                answers: questions.map((q, i) => ({ questionId: q._id, choice: answers[i] ?? null })),
+            }),
+        }).catch(() => {});
         countsRef.current = counts;
         setMode('results');
     };

@@ -29,6 +29,7 @@ import {
     AlertTriangle,
 } from 'lucide-react';
 import ExamRankingAdmin from '../../components/ExamRankingAdmin';
+import QuizAttemptsAdmin from '../../components/QuizAttemptsAdmin';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -661,6 +662,9 @@ export default function AdminPage() {
 
             {/* ── Exam ranking ────────────────────────────────────────── */}
             <ExamRankingAdmin />
+
+            {/* ── Quiz javoblari ──────────────────────────────────────── */}
+            <div className="mt-6"><QuizAttemptsAdmin /></div>
 
             {/* ── User Management ─────────────────────────────────────── */}
             <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
