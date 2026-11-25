@@ -45,6 +45,7 @@ export default function ExamResultsAdmin({ exam, attempts, openId, setOpenId, on
     const [q, setQ] = useState("");
     const [sort, setSort] = useState("percent");
     const [filter, setFilter] = useState("all"); // all | pending | violations
+    const [showAll, setShowAll] = useState(false); // hamma talabaning javoblarini birdan ochish
 
     const rows = useMemo(() => attempts.map((a) => {
         const st = computeExamStats(exam, a);
@@ -151,6 +152,10 @@ export default function ExamResultsAdmin({ exam, attempts, openId, setOpenId, on
                     <option value="time">Vaqt bo&apos;yicha</option>
                     <option value="violations">Qoidabuzarlik bo&apos;yicha</option>
                 </select>
+                <button onClick={() => setShowAll(!showAll)}
+                    className={`px-3 py-2 rounded-xl text-sm font-semibold border ${showAll ? "bg-blue-900/40 border-blue-600 text-blue-200" : "border-gray-800 bg-gray-900 text-gray-300 hover:text-white"}`}>
+                    {showAll ? "Javoblarni yig'ish" : "Hamma javoblarni ochish"}
+                </button>
             </div>
             <div className="flex flex-wrap gap-2 mb-3">
                 {chip("all", "Hammasi", rows.length)}
@@ -165,7 +170,7 @@ export default function ExamResultsAdmin({ exam, attempts, openId, setOpenId, on
                     const g = grade(st.percent);
                     const rank = rankOf.get(a._id);
                     const reason = REASON[a.finishReason];
-                    const open = openId === a._id;
+                    const open = showAll || openId === a._id;
                     return (
                         <div key={a._id} className="border-b border-gray-800 last:border-0">
                             <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3.5">
@@ -212,7 +217,7 @@ export default function ExamResultsAdmin({ exam, attempts, openId, setOpenId, on
                                 ) : <div className="w-44 shrink-0 text-xs text-gray-600">Natija yo&apos;q</div>}
 
                                 <div className="flex items-center gap-2 shrink-0">
-                                    <button onClick={() => setOpenId(open ? null : a._id)}
+                                    <button onClick={() => { if (showAll) { setShowAll(false); setOpenId(null); } else setOpenId(open ? null : a._id); }}
                                         className="flex items-center gap-1 text-xs text-blue-300 border border-gray-700 hover:border-blue-500 px-2.5 py-1.5 rounded-lg">
                                         Javoblar <ChevronDown size={13} className={`transition-transform ${open ? "rotate-180" : ""}`} />
                                     </button>
