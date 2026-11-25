@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { Trophy, Medal, Search, RefreshCw, Users, TrendingUp, TrendingDown, FileText, Hourglass, ShieldAlert, Clock, ChevronDown } from "lucide-react";
 import { grade } from "./ExamResultSummary";
@@ -213,9 +214,14 @@ export default function ExamRankingAdmin() {
                     <h2 className="text-sm font-semibold text-white">Imtihonlar: umumiy reyting</h2>
                     {ranking.length > 0 && <span className="text-xs bg-yellow-900/30 border border-yellow-800/50 text-yellow-400 px-2 py-0.5 rounded-lg font-bold">{ranking.length}</span>}
                 </div>
-                <button onClick={load} disabled={loading} className="flex items-center gap-1.5 text-xs text-gray-300 hover:text-white border border-gray-700 rounded-lg px-2.5 py-1.5 disabled:opacity-50">
-                    <RefreshCw size={12} className={loading ? "animate-spin" : ""} /> Yangilash
-                </button>
+                <div className="flex items-center gap-2">
+                    <Link href="/exam/manage" className="flex items-center gap-1.5 text-xs text-blue-300 hover:text-white border border-gray-700 hover:border-blue-500 rounded-lg px-2.5 py-1.5">
+                        <FileText size={12} /> Imtihon javoblarini ko&apos;rish
+                    </Link>
+                    <button onClick={load} disabled={loading} className="flex items-center gap-1.5 text-xs text-gray-300 hover:text-white border border-gray-700 rounded-lg px-2.5 py-1.5 disabled:opacity-50">
+                        <RefreshCw size={12} className={loading ? "animate-spin" : ""} /> Yangilash
+                    </button>
+                </div>
             </div>
 
             <div className="p-5">
