@@ -36,6 +36,11 @@ export default function CodeIDE({ language, value, onChange, functionName, testC
     const [busy, setBusy] = useState(null);          // null | 'run' | 'test'
     const [pyState, setPyState] = useState(language === 'python' ? 'loading' : 'idle');
     const termRef = useRef(null);
+    const [ask, setAsk] = useState(null);            // dastur input kutayotganda { prompt, resolve }
+    const [typed, setTyped] = useState('');
+
+    const askInput = (prompt) => new Promise((resolve) => { setTyped(''); setTab('terminal'); setAsk({ prompt, resolve }); });
+    const answer = (value) => { ask?.resolve(value); setAsk(null); };
 
     const errors = markers.filter(m => m.severity === 8);
 
@@ -73,13 +78,14 @@ export default function CodeIDE({ language, value, onChange, functionName, testC
     }, [value, language, pyState]);
 
     // Terminal pastga aylanadi
-    useEffect(() => { if (termRef.current) termRef.current.scrollTop = termRef.current.scrollHeight; }, [lines, tab]);
+    useEffect(() => { if (termRef.current) termRef.current.scrollTop = termRef.current.scrollHeight; }, [lines, tab, ask]);
 
     const handleMount = (editor, monaco) => {
         editorRef.current = editor;
         monacoRef.current = monaco;
 
-        monaco.languages.typescript.javascriptDefaults.setDiagnosticsOptions({ noSemanticValidation: false, noSyntaxValidation: false });
+        // "modul topilmadi" va require xatolari ko'rsatilmaydi: modullar ishga tushirishda yuklanadi
+        monaco.languages.typescript.javascriptDefaults.setDiagnosticsOptions({ noSemanticValidation: false, noSyntaxValidation: false, diagnosticCodesToIgnore: [2307, 2792, 2580, 1375, 1378] });
         monaco.languages.typescript.javascriptDefaults.setCompilerOptions({ allowNonTsExtensions: true, target: monaco.languages.typescript.ScriptTarget.ES2020 });
 
         if (!pyCompletionRegistered) {
@@ -107,7 +113,7 @@ export default function CodeIDE({ language, value, onChange, functionName, testC
         setBusy('run'); setTab('terminal');
         push('cmd', `$ ${language === 'python' ? 'python' : 'node'} ${FILE[language]}`);
         if (language === 'python' && pyState !== 'ready') push('info', 'Python muhiti yuklanmoqda, kuting…');
-        await runProgram({ language, code: value || '', onLine: (l) => push(l.stream, l.text) });
+        await runProgram({ language, code: value || '', onLine: (l) => push(l.stream, l.text), onInput: askInput });
         push('info', '[jarayon tugadi]');
         setBusy(null);
     };
@@ -217,7 +223,7 @@ export default function CodeIDE({ language, value, onChange, functionName, testC
 
                     <div ref={termRef} className="flex-1 min-h-0 overflow-auto p-2.5 font-mono text-xs leading-relaxed select-text">
                         {tab === 'terminal' ? (
-                            lines.length === 0 ? (
+                            lines.length === 0 && !ask ? (
                                 <p className="text-gray-600">
                                     {language === 'python' && pyState === 'loading' ? 'Python muhiti yuklanmoqda…' : 'Run bosing yoki Ctrl+Enter. Natija shu yerda chiqadi.'}
                                 </p>
@@ -234,6 +240,15 @@ export default function CodeIDE({ language, value, onChange, functionName, testC
                                 <span className="ml-auto text-gray-500 shrink-0">{FILE[language]}:{m.startLineNumber}:{m.startColumn}</span>
                             </button>
                         ))}
+                        {tab === 'terminal' && ask && (
+                            <form onSubmit={(e) => { e.preventDefault(); answer(typed); }} className="flex items-center gap-1.5 text-gray-200">
+                                {ask.prompt && <span className="whitespace-pre-wrap">{ask.prompt}</span>}
+                                <input autoFocus value={typed} onChange={(e) => setTyped(e.target.value)} autoComplete="off" spellCheck={false}
+                                    placeholder="yozing va Enter bosing"
+                                    className="flex-1 min-w-0 bg-transparent outline-none border-b border-blue-500 text-white placeholder:text-gray-600" />
+                                <button type="button" onClick={() => answer(null)} className="shrink-0 text-gray-500 hover:text-red-400">To&apos;xtatish</button>
+                            </form>
+                        )}
                     </div>
                 </div>
             </div>

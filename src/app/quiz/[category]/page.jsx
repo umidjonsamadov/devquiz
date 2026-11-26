@@ -10,6 +10,7 @@ import {
     ShieldCheck, Eye, EyeOff,
 } from 'lucide-react';
 import ResultsSummary from '@/components/ResultsSummary';
+import { optionOrder } from '@/lib/shuffle';
 
 const OPTION_LABELS = ['A', 'B', 'C', 'D'];
 const DIFFICULTIES  = ['Easy', 'Medium', 'Hard'];
@@ -334,7 +335,8 @@ export default function QuizCategoryPage() {
             const res = await fetch(`/api/quizs/${encodeURIComponent(category)}`);
             if (res.ok) {
                 const data = await res.json();
-                qs = data.questions || [];
+                // variantlar ham har safar har xil tartibda chiqadi
+                qs = (data.questions || []).map(q => ({ ...q, optionOrder: optionOrder(q.options, Math.random()) }));
             }
         } catch (e) { console.error(e); }
         countsRef.current = { correct: 0, incorrect: 0, unanswered: 0, xpEarned: 0 };
@@ -525,7 +527,8 @@ export default function QuizCategoryPage() {
                         </div>
 
                         <div className="flex flex-col gap-2.5">
-                            {current.options.map((opt, i) => {
+                            {current.optionOrder.map((i, pos) => {
+                                const opt = current.options[i];
                                 const isSelected   = selected === i;
                                 let container = 'border-gray-800 bg-gray-900 hover:border-gray-600 hover:bg-gray-800/80 cursor-pointer';
                                 if (isSelected) container = 'border-green-500/60 bg-green-900/10 cursor-pointer';
@@ -537,7 +540,7 @@ export default function QuizCategoryPage() {
                                 if (isSelected) textCls = 'text-white';
 
                                 const icon = isSelected ? <Check className="w-4 h-4" />
-                                    : <span className="text-sm font-bold">{String.fromCharCode(65 + i)}</span>;
+                                    : <span className="text-sm font-bold">{String.fromCharCode(65 + pos)}</span>;
 
                                 return (
                                     <button

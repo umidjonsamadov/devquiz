@@ -8,10 +8,13 @@ import {
     Code2, ListChecks, Trophy, AlertTriangle, Loader2, Send, Flag,
 } from 'lucide-react';
 import { preloadPython } from '../../../lib/codeRunner';
+import { arrangeExam } from '../../../lib/shuffle';
 import CodeIDE from '../../../components/CodeIDE';
 import ExamResultSummary from '../../../components/ExamResultSummary';
 
 const MAX_VIOLATIONS = 3;
+const AWAY_LIMIT_MS = 5000; // oyna fokusda bo'lmasligi mumkin bo'lgan eng uzoq vaqt
+const KICK_CHECK_MS = 4000; // admin chiqarib yuborganini tekshirish oralig'i
 const LETTERS = ['A', 'B', 'C', 'D', 'E', 'F'];
 
 const fmt = (ms) => {
@@ -112,11 +115,60 @@ export default function ExamTakePage() {
         setPhase('done');
     }, [id]);
 
+    // ── Avtomatik saqlash ─────────────────────────────────────
+    // Sahifa yopilsa yoki imtihon to'xtab qolsa, ishlangan javoblar yo'qolmasligi uchun
+    const savedDraftRef = useRef('');
+    const saveDraft = useCallback((keepalive = false) => {
+        if (finishedRef.current || phaseRef.current !== 'running') return;
+        const { answers: ans, codes: cds } = dataRef.current;
+        const body = JSON.stringify({ draft: { answers: ans, code: cds } });
+        if (body === savedDraftRef.current) return;
+        savedDraftRef.current = body;
+        const retry = () => { savedDraftRef.current = ''; };
+        fetch(`/api/exams/${id}/attempt`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body,
+            keepalive: keepalive && new Blob([body]).size < 60000, // brauzer keepalive hajmini cheklaydi
+        }).then(r => { if (!r.ok) retry(); }).catch(retry);
+    }, [id]);
+
+    useEffect(() => { saveDraft(); }, [answers, saveDraft]); // test javobi darhol saqlanadi
+
+    useEffect(() => {
+        if (phase !== 'running') return;
+        const t = setInterval(saveDraft, 3000); // kod yozilayotganda
+        return () => clearInterval(t);
+    }, [phase, saveDraft]);
+
+    // ── Admin chiqarib yuborishi ──────────────────────────────
+    const showKicked = useCallback((attempt) => {
+        finishedRef.current = true;
+        if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+        setResult(attempt);
+        setConfirmEnd(false);
+        setLocked(null);
+        setSubmitting(false);
+        setPhase('done');
+    }, []);
+
+    useEffect(() => {
+        if (phase !== 'running') return;
+        const t = setInterval(async () => {
+            try {
+                const d = await fetch(`/api/exams/${id}/attempt`, { cache: 'no-store' }).then(r => r.json());
+                if (d.attempt?.finishReason === 'kicked') showKicked(d.attempt);
+            } catch {} // internet uzilsa keyingi safar tekshiriladi
+        }, KICK_CHECK_MS);
+        return () => clearInterval(t);
+    }, [phase, id, showKicked]);
+
     // ── Qoidabuzarlik ─────────────────────────────────────────
     const lock = useCallback((reason) => {
         if (finishedRef.current || phaseRef.current !== 'running' || lockedRef.current) return;
         lockedRef.current = true;
         setLocked(reason);
+        saveDraft(true);
         violationsRef.current += 1;
         setViolations(violationsRef.current);
         fetch(`/api/exams/${id}/attempt`, {
@@ -126,7 +178,7 @@ export default function ExamTakePage() {
             keepalive: true,
         }).catch(() => {});
         if (violationsRef.current >= MAX_VIOLATIONS) finish('violations');
-    }, [id, finish]);
+    }, [id, finish, saveDraft]);
 
     const resume = async () => {
         try { await document.documentElement.requestFullscreen(); } catch {}
@@ -147,6 +199,7 @@ export default function ExamTakePage() {
             const r = await fetch(`/api/exams/${id}/attempt`, { method: 'POST' });
             const d = await r.json();
             if (!r.ok) {
+                if (d.attempt?.finishReason === 'kicked') { showKicked(d.attempt); return; }
                 await document.exitFullscreen().catch(() => {});
                 setError(d.message || 'Xato');
                 return;
@@ -157,6 +210,28 @@ export default function ExamTakePage() {
             endAtRef.current = Date.now() + d.attempt.remainingMs;
             setRemaining(d.attempt.remainingMs);
             lockedRef.current = false;
+            // Har bir urinishning o'z tartibi bor; davom ettirilganda ham o'sha tartib qoladi
+            const questions = arrangeExam(exam.questions, d.attempt._id);
+            const arranged = { ...exam, questions };
+            setExam(arranged);
+            dataRef.current = { exam: arranged, answers, codes };
+            // Oldin ishlangan javoblarni tiklash
+            const draft = d.attempt.draft;
+            if (draft) {
+                const restoredAnswers = draft.answers || {};
+                const restoredCodes = { ...codes, ...(draft.code || {}) };
+                setAnswers(restoredAnswers);
+                setCodes(restoredCodes);
+                // darhol finish() chaqirilsa ham tiklangan javoblar yuborilsin
+                dataRef.current = { exam: arranged, answers: restoredAnswers, codes: restoredCodes };
+                const tests = questions.filter(x => x.type === 'test');
+                testsDoneRef.current = tests.length > 0 && tests.every(x => restoredAnswers[x._id] !== undefined);
+                // birinchi ishlanmagan savoldan davom etadi
+                const next = questions.findIndex(x => x.type === 'test'
+                    ? restoredAnswers[x._id] === undefined
+                    : !(restoredCodes[x._id] || '').trim() || restoredCodes[x._id] === x.starterCode);
+                setIdx(Math.max(0, next));
+            }
             if (exam.questions.some(x => x.type === 'code' && x.language === 'python')) preloadPython().catch(() => {});
             setPhase('running');
             if (violationsRef.current >= MAX_VIOLATIONS) finish('violations');
@@ -183,12 +258,38 @@ export default function ExamTakePage() {
 
         const onFs = () => { if (!document.fullscreenElement) lock("To'liq ekrandan chiqdingiz"); };
         const onVis = () => { if (document.hidden) lock("Boshqa oyna yoki tabga o'tdingiz"); };
-        const onBlur = () => lock("Imtihon oynasidan chiqdingiz");
+        // Fokus yo'qolishining o'zi qoidabuzarlik emas (bildirishnoma, tizim oynasi ham shunday qiladi).
+        // Alt / Win bilan chiqilsa darhol, aks holda AWAY_LIMIT_MS ichida qaytmasa yoziladi.
+        const held = new Set();
+        let switchKeyUpAt = 0;
+        let awayTimer = null;
+        let awaySince = 0;
+        const isSwitchKey = (k) => k === 'Alt' || k === 'Meta';
+        const clearAway = () => { clearTimeout(awayTimer); awaySince = 0; };
+        // hasFocus() sahifa ichidagi iframe fokusda bo'lsa ham true qaytaradi
+        const checkAway = () => {
+            if (awaySince && !document.hasFocus() && Date.now() - awaySince >= AWAY_LIMIT_MS) lock("Imtihon oynasidan chiqdingiz");
+        };
+        const onBlur = () => {
+            const switched = held.size > 0 || Date.now() - switchKeyUpAt < 500;
+            held.clear(); // oynadan chiqilgach keyup kelmaydi
+            clearAway();
+            if (switched) { lock("Boshqa oynaga o'tishga urindingiz (Alt+Tab / Win)"); return; }
+            awaySince = Date.now();
+            awayTimer = setTimeout(checkAway, AWAY_LIMIT_MS);
+        };
+        // Taymer fonda sekinlashishi mumkin, shuning uchun qaytganda ham tekshiriladi
+        const onFocus = () => {
+            if (awaySince && Date.now() - awaySince >= AWAY_LIMIT_MS) lock("Imtihon oynasidan chiqdingiz");
+            clearAway();
+        };
+        // Brauzerning "orqaga" tugmasi bilan saytdan chiqish
+        const onPopState = () => lock("Imtihon sahifasidan chiqdingiz");
         const block = (e) => e.preventDefault();
         const inIde = (e) => !!e.target?.closest?.('[data-ide]');
         // IDE ichida nusxalash/qirqish mumkin (kodni ko'chirish uchun), tashqarida yo'q
         const onCopy = (e) => {
-            if (!inIde(e)) { e.preventDefault(); return; }
+            if (!inIde(e)) { e.preventDefault(); lock('Nusxalashga urinish aniqlandi'); return; }
             try { clipRef.current = e.clipboardData.getData('text/plain'); } catch {}
         };
         // Qo'yish faqat IDE ichidan nusxalangan matn bo'lsa mumkin: tashqaridan kod kiritib bo'lmaydi
@@ -200,7 +301,9 @@ export default function ExamTakePage() {
         };
         const onKeyDown = (e) => {
             const k = e.key;
-            if (k === 'PrintScreen' || (e.metaKey && e.shiftKey) || (e.ctrlKey && e.shiftKey && /s/i.test(k))) {
+            if (isSwitchKey(k)) held.add(k);
+            // e.code: "Shift" tugmasining o'zi (Ctrl+Shift — til almashtirish) skrinshot hisoblanmasin
+            if (k === 'PrintScreen' || (e.metaKey && e.shiftKey) || (e.ctrlKey && e.shiftKey && e.code === 'KeyS')) {
                 navigator.clipboard?.writeText('').catch(() => {});
                 lock('Skrinshot urinishi aniqlandi');
                 e.preventDefault();
@@ -208,6 +311,7 @@ export default function ExamTakePage() {
             if (k === 'F12' || (e.ctrlKey && /^[pspu]$/i.test(k)) || (e.ctrlKey && e.shiftKey && /^[ij]$/i.test(k))) e.preventDefault();
         };
         const onKeyUp = (e) => {
+            if (isSwitchKey(e.key)) { held.delete(e.key); switchKeyUpAt = Date.now(); }
             if (e.key === 'PrintScreen') {
                 navigator.clipboard?.writeText('').catch(() => {});
                 lock('Skrinshot urinishi aniqlandi');
@@ -218,6 +322,8 @@ export default function ExamTakePage() {
         document.addEventListener('fullscreenchange', onFs);
         document.addEventListener('visibilitychange', onVis);
         window.addEventListener('blur', onBlur);
+        window.addEventListener('focus', onFocus);
+        window.addEventListener('popstate', onPopState);
         document.addEventListener('contextmenu', block);
         document.addEventListener('copy', onCopy);
         document.addEventListener('cut', onCopy);
@@ -230,6 +336,9 @@ export default function ExamTakePage() {
             document.removeEventListener('fullscreenchange', onFs);
             document.removeEventListener('visibilitychange', onVis);
             window.removeEventListener('blur', onBlur);
+            window.removeEventListener('focus', onFocus);
+            window.removeEventListener('popstate', onPopState);
+            clearAway();
             document.removeEventListener('contextmenu', block);
             document.removeEventListener('copy', onCopy);
             document.removeEventListener('cut', onCopy);
@@ -277,7 +386,7 @@ export default function ExamTakePage() {
             else if (e.key === 'ArrowLeft' && pos > 0) { setIdx(items[pos - 1].i); e.preventDefault(); }
             else if (cur.type === 'test') {
                 const n = LETTERS.indexOf(e.key.toUpperCase());
-                if (n >= 0 && n < cur.options.length) { setAnswers(a => ({ ...a, [cur._id]: n })); e.preventDefault(); }
+                if (n >= 0 && n < cur.options.length) { setAnswers(a => ({ ...a, [cur._id]: cur.optionOrder[n] })); e.preventDefault(); }
             }
         };
         window.addEventListener('keydown', onKey);
@@ -297,6 +406,21 @@ export default function ExamTakePage() {
             <div className={`${shell} flex flex-col items-center justify-center gap-3`}>
                 <p className="text-red-400">{error}</p>
                 <button onClick={() => router.push('/exam')} className="text-green-400 text-sm hover:underline">Imtihonlar ro&apos;yxatiga</button>
+            </div>
+        );
+    }
+
+    if (phase === 'done' && result?.finishReason === 'kicked') {
+        return (
+            <div className={`${shell} flex items-center justify-center p-4`}>
+                <div className="w-full max-w-md bg-gray-900 border border-red-900 rounded-2xl p-8 text-center">
+                    <ShieldAlert className="mx-auto text-red-400 mb-4" size={48} />
+                    <h1 className="text-2xl font-extrabold text-white mb-2">Siz examdan chiqarib yuborildingiz</h1>
+                    <p className="text-gray-400 text-sm">{exam?.title}</p>
+                    <button onClick={() => router.push('/exam')} className="mt-6 w-full bg-gray-800 hover:bg-gray-700 text-white font-bold py-2.5 rounded-xl text-sm">
+                        Imtihonlarga qaytish
+                    </button>
+                </div>
             </div>
         );
     }
@@ -336,7 +460,7 @@ export default function ExamTakePage() {
                     <div className="bg-yellow-900/20 border border-yellow-800/50 rounded-xl p-4 text-xs text-yellow-200/90 space-y-1.5 mb-5">
                         <p className="flex items-center gap-1.5 font-semibold text-yellow-400"><ShieldAlert size={14} /> Qoidalar</p>
                         <p>• Imtihon to&apos;liq ekran rejimida o&apos;tadi. Jami {total} ball.</p>
-                        <p>• Ekrandan chiqsangiz, boshqa oynaga o&apos;tsangiz yoki skrinshot olsangiz, savollar yashiriladi va qoidabuzarlik yoziladi.</p>
+                        <p>• Nusxalashga yoki skrinshot olishga urinsangiz, Alt+Tab qilsangiz, boshqa tab yoki oynaga o&apos;tsangiz, to&apos;liq ekrandan yoki saytdan chiqsangiz, savollar yashiriladi va qoidabuzarlik yoziladi.</p>
                         <p>• {MAX_VIOLATIONS} ta qoidabuzarlikdan keyin imtihon avtomatik tugaydi.</p>
                         <p>• Tashqaridan nusxa qo&apos;yish o&apos;chirilgan (kod muharriri ichida nusxalash mumkin). Vaqt tugasa javoblar avtomatik yuboriladi.</p>
                         <p>• Imtihonni faqat bir marta topshirish mumkin.</p>
@@ -524,12 +648,13 @@ export default function ExamTakePage() {
                         </div>
                         <p className="text-white font-semibold leading-relaxed whitespace-pre-wrap mb-5">{q.text}</p>
                         <div className="space-y-2">
-                            {q.options.map((opt, i) => {
+                            {q.optionOrder.map((i, pos) => {
+                                const opt = q.options[i];
                                 const sel = answers[q._id] === i;
                                 return (
                                     <button key={i} onClick={() => setAnswers(a => ({ ...a, [q._id]: i }))}
                                         className={`w-full flex items-center gap-3 text-left rounded-xl border-2 px-4 py-3 transition-all ${sel ? 'border-green-500 bg-green-900/20' : 'border-gray-800 bg-gray-800/50 hover:border-gray-600'}`}>
-                                        <span className={`w-8 h-8 shrink-0 rounded-lg flex items-center justify-center text-sm font-bold ${sel ? 'bg-green-500 text-white' : 'bg-gray-700 text-gray-400'}`}>{LETTERS[i]}</span>
+                                        <span className={`w-8 h-8 shrink-0 rounded-lg flex items-center justify-center text-sm font-bold ${sel ? 'bg-green-500 text-white' : 'bg-gray-700 text-gray-400'}`}>{LETTERS[pos]}</span>
                                         <span className={`text-sm ${sel ? 'text-green-200' : 'text-gray-300'}`}>{opt}</span>
                                     </button>
                                 );

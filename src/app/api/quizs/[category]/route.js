@@ -51,8 +51,8 @@ export async function GET(req, { params }) {
             return new Response(JSON.stringify({ questions: qs }), { status: 200 });
         }
 
-        // Quiz mode: up to 31 shuffled questions
-        const qs = await Question.find({ category: categoryRegex }).limit(31).lean();
+        // Quiz mode: butun bazadan tasodifiy 31 tagacha savol
+        const qs = await Question.find({ category: categoryRegex }).lean();
 
         // shuffle for randomness
         for (let i = qs.length - 1; i > 0; i--) {
@@ -60,7 +60,7 @@ export async function GET(req, { params }) {
             [qs[i], qs[j]] = [qs[j], qs[i]];
         }
 
-        return new Response(JSON.stringify({ questions: qs }), { status: 200 });
+        return new Response(JSON.stringify({ questions: qs.slice(0, 31) }), { status: 200 });
     } catch (err) {
         console.error('Get category questions error:', err);
         return new Response(JSON.stringify({ message: 'Server error' }), { status: 500 });

@@ -2,12 +2,26 @@ import { connectDB } from '../../../config/mongodb.js';
 import { Exam } from '../../../models/Exam.js';
 import { ExamAttempt } from '../../../models/ExamAttempt.js';
 import { isAdmin, parseSession } from '../../../config/adminAuth.js';
+import { gradeAnswers } from '../../gradeAnswers.js';
 
 const json = (body, status = 200) => new Response(JSON.stringify(body), { status });
 const GRACE_MS = 15000; // tarmoq kechikishi uchun qo'shimcha vaqt
 
 function remainingMs(attempt, exam) {
     return new Date(attempt.startedAt).getTime() + exam.durationMinutes * 60000 - Date.now();
+}
+
+function cleanDraft(raw, exam) {
+    const draft = { answers: {}, code: {} };
+    for (const q of exam.questions) {
+        const qid = String(q._id);
+        if (q.type === 'test') {
+            if (Number.isInteger(raw?.answers?.[qid])) draft.answers[qid] = raw.answers[qid];
+        } else if (typeof raw?.code?.[qid] === 'string') {
+            draft.code[qid] = raw.code[qid].slice(0, 20000);
+        }
+    }
+    return draft;
 }
 
 // GET: admin -> barcha urinishlar, talaba -> o'zinikini
@@ -40,16 +54,24 @@ export async function POST(req, { params }) {
         if (!exam || !exam.isActive) return json({ message: 'Imtihon mavjud emas' }, 404);
 
         let attempt = await ExamAttempt.findOne({ exam: id, username: session.username });
-        if (attempt?.status === 'finished') return json({ message: 'Siz bu imtihonni topshirgansiz' }, 409);
+        if (attempt?.status === 'finished') {
+            const message = attempt.finishReason === 'kicked' ? 'Siz examdan chiqarib yuborildingiz' : 'Siz bu imtihonni topshirgansiz';
+            return json({ message, attempt }, 409);
+        }
         if (!attempt) {
             attempt = await ExamAttempt.create({
                 exam: id,
                 username: session.username,
                 maxScore: exam.questions.reduce((s, q) => s + (q.points || 0), 0),
             });
+        } else if (attempt.resumeElapsedMs != null) {
+            // Taymer talaba qayta kirgan paytdan qolgan joyidan davom etadi
+            attempt.startedAt = new Date(Date.now() - attempt.resumeElapsedMs);
+            attempt.resumeElapsedMs = null;
+            await attempt.save();
         }
         const left = remainingMs(attempt, exam);
-        return json({ attempt: { _id: attempt._id, violations: attempt.violations, remainingMs: Math.max(0, left) } });
+        return json({ attempt: { _id: attempt._id, violations: attempt.violations, remainingMs: Math.max(0, left), draft: attempt.draft || null } });
     } catch (e) {
         if (e?.code === 11000) return json({ message: 'Urinish allaqachon mavjud' }, 409);
         console.error('Attempt POST error:', e);
@@ -70,29 +92,20 @@ export async function PUT(req, { params }) {
         if (!exam || !attempt) return json({ message: 'Urinish topilmadi' }, 404);
         if (attempt.status === 'finished') return json({ attempt }, 200);
 
-        const body = await req.json();
-        const answers = body.answers || {};
-        const code = body.code || {};
-        const late = remainingMs(attempt, exam) < -GRACE_MS;
+        if (attempt.resumeElapsedMs != null) return json({ message: 'Sahifani yangilab, imtihonni davom ettiring' }, 409);
 
-        let score = 0;
-        const saved = {};
-        for (const q of exam.questions) {
-            const qid = String(q._id);
-            if (q.type === 'test') {
-                const choice = Number.isInteger(answers[qid]) ? answers[qid] : null;
-                const earned = !late && choice === q.correctAnswer ? q.points : 0;
-                saved[qid] = { choice, earned };
-                score += earned;
-            } else {
-                // Amaliy masala: kod saqlanadi, ballni admin qo'lda qo'yadi (graded=false)
-                const c = code[qid] || {};
-                saved[qid] = { code: String(c.code || '').slice(0, 20000), earned: 0, graded: false };
-            }
-        }
+        const body = await req.json();
+        const late = remainingMs(attempt, exam) < -GRACE_MS;
+        // Kechikkan bo'lsa, vaqtida avtomatik saqlangan javoblar hisobga olinadi
+        const fromDraft = late && !!attempt.draft;
+        const answers = (fromDraft ? attempt.draft.answers : body.answers) || {};
+        const code = fromDraft
+            ? attempt.draft.code || {}
+            : Object.fromEntries(Object.entries(body.code || {}).map(([k, v]) => [k, v?.code]));
+        const { saved, score } = gradeAnswers(exam, answers, code, !late || fromDraft);
 
         attempt.answers = saved;
-        attempt.score = Math.round(score * 100) / 100;
+        attempt.score = score;
         attempt.violations = Math.max(attempt.violations, Number(body.violations) || 0);
         attempt.status = 'finished';
         attempt.finishedAt = new Date();
@@ -106,18 +119,29 @@ export async function PUT(req, { params }) {
     }
 }
 
-// PATCH: qoidabuzarliklar sonini serverda saqlash
+// PATCH: qoidabuzarliklar sonini va/yoki ishlangan javoblarni (draft) serverda saqlash
 export async function PATCH(req, { params }) {
     try {
         const { id } = await params;
         const session = parseSession(req.headers.get('cookie'));
         if (!session?.username) return json({ message: 'Kirish kerak' }, 401);
         await connectDB();
-        const { violations } = await req.json();
-        await ExamAttempt.updateOne(
-            { exam: id, username: session.username, status: 'in_progress' },
-            { $max: { violations: Number(violations) || 0 } },
-        );
+        const { violations, draft } = await req.json();
+        const filter = { exam: id, username: session.username, status: 'in_progress', resumeElapsedMs: null };
+        const count = Number(violations) || 0;
+        if (count > 0) {
+            await ExamAttempt.updateOne(
+                { ...filter, violations: { $lt: count } },
+                { $set: { violations: count, lastViolationAt: new Date() } },
+            );
+        }
+        if (draft) {
+            const exam = await Exam.findById(id).lean();
+            const attempt = await ExamAttempt.findOne(filter).lean();
+            // Vaqt tugagandan keyin javoblarni o'zgartirib bo'lmaydi
+            if (!exam || !attempt || remainingMs(attempt, exam) < -GRACE_MS) return json({ ok: false }, 409);
+            await ExamAttempt.updateOne(filter, { $set: { draft: cleanDraft(draft, exam), savedAt: new Date() } });
+        }
         return json({ ok: true });
     } catch (e) {
         return json({ message: 'Server xatosi' }, 500);

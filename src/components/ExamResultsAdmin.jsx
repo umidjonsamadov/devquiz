@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import {
     Users, TrendingUp, Trophy, TrendingDown, Hourglass, Search, RotateCcw, ChevronDown,
-    ShieldAlert, Clock, ListChecks, Code2, Medal,
+    ShieldAlert, Clock, ListChecks, Code2, Medal, Play, UserX,
 } from "lucide-react";
 import { computeExamStats, grade } from "./ExamResultSummary";
 
@@ -13,6 +13,7 @@ const fmtP = (n) => `${r1(n)}%`;
 const REASON = {
     time: { t: "Vaqt tugadi", c: "text-amber-400 border-amber-800/60" },
     violations: { t: "Qoidabuzarlik", c: "text-red-400 border-red-800/60" },
+    kicked: { t: "Chiqarib yuborilgan", c: "text-red-400 border-red-800/60" },
     submitted: { t: "Topshirdi", c: "text-green-400 border-green-800/60" },
 };
 
@@ -41,7 +42,7 @@ function Mini({ icon: Icon, children, className = "" }) {
     );
 }
 
-export default function ExamResultsAdmin({ exam, attempts, openId, setOpenId, onRetake, renderAnswers }) {
+export default function ExamResultsAdmin({ exam, attempts, openId, setOpenId, onRetake, onResume, onKick, renderAnswers }) {
     const [q, setQ] = useState("");
     const [sort, setSort] = useState("percent");
     const [filter, setFilter] = useState("all"); // all | pending | violations
@@ -221,7 +222,22 @@ export default function ExamResultsAdmin({ exam, attempts, openId, setOpenId, on
                                         className="flex items-center gap-1 text-xs text-blue-300 border border-gray-700 hover:border-blue-500 px-2.5 py-1.5 rounded-lg">
                                         Javoblar <ChevronDown size={13} className={`transition-transform ${open ? "rotate-180" : ""}`} />
                                     </button>
-                                    <button onClick={() => onRetake(a)} title="Qayta topshirishga ruxsat" className="text-gray-500 hover:text-yellow-400 p-1.5"><RotateCcw size={14} /></button>
+                                    {!fin && (
+                                        <button onClick={() => onKick(a)} title="Talabani examdan chiqarib yuborish"
+                                            className="flex items-center gap-1 text-xs text-red-300 border border-red-900 hover:bg-red-900/30 px-2.5 py-1.5 rounded-lg">
+                                            <UserX size={12} /> Chiqarib yuborish
+                                        </button>
+                                    )}
+                                    {(fin || a.violations >= 3) && (
+                                        <button onClick={() => onResume(a)} title="Javoblari saqlanadi, qoidabuzarliklar 0 bo'ladi"
+                                            className="flex items-center gap-1 text-xs text-green-300 border border-gray-700 hover:border-green-500 px-2.5 py-1.5 rounded-lg">
+                                            <Play size={12} /> Davom ettirish
+                                        </button>
+                                    )}
+                                    <button onClick={() => onRetake(a)} title="Javoblari o'chadi, boshidan topshiradi"
+                                        className="flex items-center gap-1 text-xs text-yellow-300 border border-gray-700 hover:border-yellow-500 px-2.5 py-1.5 rounded-lg">
+                                        <RotateCcw size={12} /> Boshidan
+                                    </button>
                                 </div>
                             </div>
                             {open && renderAnswers(a)}

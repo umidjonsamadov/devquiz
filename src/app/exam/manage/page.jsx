@@ -211,8 +211,38 @@ export default function ExamManagePage() {
         setOpenAttempt(null); setView('results');
     };
 
+    const kick = async (a) => {
+        if (!confirm(`${a.username} examdan chiqarib yuborilsinmi?`)) return;
+        try {
+            const r = await fetch(`/api/exams/${a.exam}/attempt/kick`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username: a.username }),
+            });
+            const d = await r.json();
+            if (!r.ok) say('error', d.message || 'Xato');
+            else say('success', `${a.username} examdan chiqarildi`);
+            openResults(results.exam);
+        } catch { say('error', 'Internet xatosi'); }
+    };
+
+    const allowResume = async (a) => {
+        if (!confirm(`${a.username} ishlagan joyidan davom ettirsinmi? Javoblari va qolgan vaqti saqlanadi, qoidabuzarliklar 0 bo'ladi.`)) return;
+        try {
+            const r = await fetch(`/api/exams/${a.exam}/attempt/resume`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username: a.username }),
+            });
+            const d = await r.json();
+            if (!r.ok) { say('error', d.message || 'Xato'); return; }
+            say('success', `Ruxsat berildi. Qolgan vaqt: ${d.minutesLeft} daqiqa`);
+            openResults(results.exam);
+        } catch { say('error', 'Internet xatosi'); }
+    };
+
     const allowRetake = async (a) => {
-        if (!confirm(`${a.username} qayta topshirishiga ruxsat berasizmi? Hozirgi natija o'chadi.`)) return;
+        if (!confirm(`${a.username} boshidan topshirsinmi? Ishlagan test va amaliylari butunlay o'chadi.`)) return;
         await fetch(`/api/exams/${a.exam}/attempt?username=${encodeURIComponent(a.username)}`, { method: 'DELETE' });
         openResults(results.exam);
     };
@@ -369,7 +399,11 @@ export default function ExamManagePage() {
                                 <div className="max-w-5xl mx-auto">
                     <button onClick={() => setView('list')} className="flex items-center gap-1 text-gray-400 hover:text-white text-sm mb-4"><ArrowLeft size={15} /> Orqaga</button>
                     <h1 className="text-xl font-extrabold text-white mb-1">{results.exam.title}: natijalar</h1>
-                    <p className="text-gray-500 text-sm mb-5">{results.attempts.length} ta urinish</p>
+                    <p className="text-gray-500 text-sm mb-5">
+                        {results.attempts.length} ta urinish
+                        {/* hozirgina boshlagan talabalarni ko'rish uchun */}
+                        <button onClick={() => openResults(results.exam)} className="ml-3 text-blue-300 hover:underline">Yangilash</button>
+                    </p>
                     <AnswerKey exam={results.exam} />
                     <ExamResultsAdmin
                         exam={results.exam}
@@ -377,6 +411,8 @@ export default function ExamManagePage() {
                         openId={openAttempt}
                         setOpenId={setOpenAttempt}
                         onRetake={allowRetake}
+                        onResume={allowResume}
+                        onKick={kick}
                         renderAnswers={(a) => <AttemptAnswers a={a} exam={results.exam} say={say} onSaved={() => openResults(results.exam)} />}
                     />
                 </div>

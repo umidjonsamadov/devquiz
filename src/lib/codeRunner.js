@@ -16,7 +16,7 @@ function deepEqual(a, b) {
 
 // ───────────────────────── JavaScript ─────────────────────────
 const JS_WORKER_SRC = deepEqualSrc + `
-const out = (stream, text) => self.postMessage({ type: 'out', stream, text });
+const out = (stream, text) => { if (!waiting) self.postMessage({ type: 'out', stream, text }); };
 const fmt = (args) => args.map(x => {
     if (typeof x === 'string') return x;
     try { const s = JSON.stringify(x, null, 2); return s === undefined ? String(x) : s; } catch (e) { return String(x); }
@@ -28,17 +28,61 @@ console.warn = (...a) => out('err', fmt(a));
 console.error = (...a) => out('err', fmt(a));
 const AsyncFunction = (async function () {}).constructor;
 
+// input: prompt() yoki require('prompt-sync' / 'readline-sync')
+const NEED_INPUT = {};
+let queue = [];
+let waiting = false;
+self.prompt = (q = '') => {
+    if (!queue.length) {
+        if (!waiting) { self.postMessage({ type: 'need-input', prompt: String(q) }); waiting = true; }
+        throw NEED_INPUT;
+    }
+    const v = queue.shift();
+    out('out', String(q) + v);
+    return v;
+};
+const MODULES = {
+    'prompt-sync': () => self.prompt,
+    'readline-sync': {
+        question: (q) => self.prompt(q),
+        prompt: () => self.prompt(),
+        questionInt: (q) => parseInt(self.prompt(q), 10),
+        questionFloat: (q) => parseFloat(self.prompt(q)),
+    },
+};
+const has = (name) => Object.prototype.hasOwnProperty.call(MODULES, name);
+self.require = (name) => {
+    if (has(name)) return MODULES[name];
+    throw new Error("require('" + name + "') brauzerda ishlamaydi. import ... from ishlating.");
+};
+const load = async (name) => {
+    if (has(name)) return Object.assign({ default: MODULES[name] }, MODULES[name]);
+    if (name.startsWith('node:') || ['fs', 'path', 'os', 'readline', 'http', 'child_process'].includes(name)) {
+        throw new Error("'" + name + "' Node.js moduli, brauzerda ishlamaydi");
+    }
+    return import(name.startsWith('https://') ? name : 'https://cdn.jsdelivr.net/npm/' + name + '/+esm');
+};
+
 self.onmessage = async (e) => {
     const m = e.data;
     if (m.mode === 'run') {
-        try { await new AsyncFunction(m.code)(); }
-        catch (err) { out('err', (err && err.name ? err.name + ': ' : '') + (err && err.message ? err.message : String(err))); }
+        queue = (m.inputs || []).slice();
+        // qayta ishga tushirishda tasodifiy sonlar o'zgarmasligi uchun
+        let seed = m.seed >>> 0;
+        Math.random = () => {
+            seed = (seed + 0x6D2B79F5) >>> 0;
+            let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+            t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+            return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+        };
+        try { await new AsyncFunction('__import', m.code)(load); }
+        catch (err) { if (err !== NEED_INPUT) out('err', (err && err.name ? err.name + ': ' : '') + (err && err.message ? err.message : String(err))); }
         self.postMessage({ type: 'done' });
         return;
     }
     let fn;
     try {
-        fn = new Function(m.code + '\\n;return typeof ' + m.functionName + ' === "function" ? ' + m.functionName + ' : undefined;')();
+        fn = await new AsyncFunction('__import', m.code + '\\n;return typeof ' + m.functionName + ' === "function" ? ' + m.functionName + ' : undefined;')(load);
     } catch (err) {
         self.postMessage({ type: 'fatal', error: String(err && err.message || err) });
         return;
@@ -84,7 +128,25 @@ function runInJsWorker(payload, { onMsg, idleMs, totalMs }) {
 
 // ───────────────────────── Python (Pyodide) ─────────────────────────
 const PY_HELPERS = `
-import json
+import json, sys, random
+class _NeedInput(BaseException):
+    pass
+def _prepare(ns, inputs_json, seed, on_need):
+    queue = json.loads(inputs_json)
+    asked = []
+    random.seed(seed)
+    def _input(prompt=''):
+        sys.stdout.flush()
+        if not queue:
+            if not asked:
+                asked.append(True)
+                on_need(str(prompt))
+            raise _NeedInput()
+        value = queue.pop(0)
+        print(str(prompt) + value)
+        return value
+    ns['__name__'] = '__main__'
+    ns['input'] = _input
 def _chk(src):
     try:
         compile(src, 'main.py', 'exec')
@@ -126,12 +188,24 @@ self.onmessage = async (e) => {
             post({ type: 'result', result: r || null });
             return;
         }
-        pyodide.setStdout({ batched: (s) => post({ type: 'out', stream: 'out', text: s }) });
-        pyodide.setStderr({ batched: (s) => post({ type: 'out', stream: 'err', text: s }) });
+        if (m.mode === 'load') {
+            // import qilingan paketlarni (numpy, pandas va h.k.) yuklab olish
+            await pyodide.loadPackagesFromImports(m.code);
+            post({ type: 'done' });
+            return;
+        }
+        let waiting = false;
+        const out = (stream, text) => { if (!waiting) post({ type: 'out', stream, text }); };
+        pyodide.setStdout({ batched: (s) => out('out', s) });
+        pyodide.setStderr({ batched: (s) => out('err', s) });
         const ns = pyodide.globals.get('dict')();
+        const prepare = pyodide.globals.get('_prepare');
+        prepare(ns, JSON.stringify(m.inputs || []), m.seed || 0, (q) => { post({ type: 'need-input', prompt: q }); waiting = true; });
+        prepare.destroy();
         if (m.mode === 'run') {
             try { pyodide.runPython(m.code, { globals: ns }); }
-            catch (err) { post({ type: 'out', stream: 'err', text: clean(err.message) }); }
+            catch (err) { out('err', clean(err.message)); }
+            pyodide.runPython('import sys; sys.stdout.flush()');
             ns.destroy();
             post({ type: 'done' });
             return;
@@ -232,13 +306,61 @@ export async function checkPythonSyntax(code) {
 }
 
 /** Kodni oddiy skript sifatida ishga tushiradi, chiqishni onLine({stream,text}) orqali beradi. */
-export async function runProgram({ language, code, onLine }) {
-    const onMsg = (m) => { if (m.type === 'out') onLine({ stream: m.stream, text: m.text }); };
-    const r = language === 'python'
-        ? await callPy({ mode: 'run', code }, { onMsg, totalMs: 10000 })
-        : await runInJsWorker({ mode: 'run', code }, { onMsg, totalMs: 5000 });
-    if (r.timedOut) onLine({ stream: 'err', text: "Vaqt tugadi: dastur juda uzoq ishladi (cheksiz sikl?)" });
-    if (r.fatal) onLine({ stream: 'err', text: r.fatal });
+// Worker input kutib to'xtab tura olmaydi (buning uchun COOP/COEP sarlavhalari kerak). Shuning uchun
+// har yangi javobdan keyin dastur boshidan ishga tushiriladi va oldin chiqqan qatorlar takrorlanmaydi.
+export async function runProgram({ language, code, onLine, onInput }) {
+    const isPy = language === 'python';
+    const src = isPy ? code : prepareJs(code);
+    if (isPy && /^\s*(import|from)\s/m.test(code)) {
+        const l = await callPy({ mode: 'load', code }, { totalMs: 60000 });
+        if (l.timedOut || l.fatal) {
+            onLine({ stream: 'err', text: l.fatal || "Paketlarni yuklab bo'lmadi (internetni tekshiring)" });
+            return;
+        }
+    }
+    const jsLimit = src !== code ? 20000 : 5000; // import internetdan yuklanadi
+    const seed = Math.floor(Math.random() * 1e9);
+    const inputs = [];
+    let shown = 0;
+    while (true) {
+        let count = 0;
+        let question = null;
+        const onMsg = (m) => {
+            if (m.type === 'need-input') question = m.prompt;
+            else if (m.type === 'out' && ++count > shown) onLine({ stream: m.stream, text: m.text });
+        };
+        const payload = { mode: 'run', code: src, inputs, seed };
+        const r = isPy
+            ? await callPy(payload, { onMsg, totalMs: 10000 })
+            : await runInJsWorker(payload, { onMsg, totalMs: jsLimit });
+        if (question === null) {
+            if (r.timedOut) onLine({ stream: 'err', text: "Vaqt tugadi: dastur juda uzoq ishladi (cheksiz sikl?)" });
+            if (r.fatal) onLine({ stream: 'err', text: r.fatal });
+            return;
+        }
+        shown = Math.max(shown, count);
+        const value = onInput && inputs.length < 200 ? await onInput(question) : null;
+        if (value === null) return;
+        inputs.push(value);
+    }
+}
+
+// "import ... from" ni funksiya ichida ishlaydigan ko'rinishga o'tkazadi
+function prepareJs(code) {
+    return code
+        .replace(/^[ \t]*import(?![\w$(.])\s*(?:([\w$\s{},*]+?)\s*from\s*)?(['"])([^'"\n]+)\2[ \t]*;?/gm, (all, clause, quote, name) => {
+            const load = `await __import(${JSON.stringify(name)})`;
+            if (!clause) return `${load};`;
+            const star = clause.match(/\*\s*as\s+([\w$]+)/);
+            const braces = clause.match(/\{([^}]*)\}/);
+            const def = clause.match(/^\s*([\w$]+)/);
+            const parts = [];
+            if (def) parts.push(`const ${def[1]} = (${load}).default;`);
+            if (star) parts.push(`const ${star[1]} = ${load};`);
+            if (braces) parts.push(`const {${braces[1].replace(/([\w$]+)\s+as\s+([\w$]+)/g, '$1: $2')}} = ${load};`);
+            return parts.join(' ');
+        })
+        .replace(/^[ \t]*export\s+(default\s+)?(?=(async\s+)?(function|class|const|let|var)\b)/gm, '');
 }
 
 /**
@@ -249,7 +371,8 @@ export async function runTests({ language, code, functionName, testCases }) {
     const total = testCases.length;
     const results = Array.from({ length: total }, () => ({ ok: false, got: 'Bajarilmadi' }));
     const onMsg = (m) => { if (m.type === 'case') results[m.i] = { ok: m.ok, got: m.got }; };
-    const payload = { mode: 'test', code, functionName, testCases };
+    if (language === 'python') await callPy({ mode: 'load', code }, { totalMs: 60000 });
+    const payload = { mode: 'test', code: language === 'python' ? code : prepareJs(code), functionName, testCases };
     const r = language === 'python'
         ? await callPy(payload, { onMsg, idleMs: 4000 })
         : await runInJsWorker(payload, { onMsg, idleMs: 3000 });
