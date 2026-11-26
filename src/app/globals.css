@@ -8,6 +8,7 @@
 }
 
 /* Netlify badge ni to'liq yashirish */
+#nl-badge-frame,
 iframe[id*="netlify"],
 netlify-drawer,
 [id*="netlify"],
