@@ -1,6 +1,8 @@
 import { connectDB } from '../config/mongodb.js';
 import { Question } from '../models/Question.js';
 import { User } from '../models/User.js';
+import { isAdmin } from '../config/adminAuth.js';
+import { MAIN, unpublishedCategories } from '../config/questionPool.js';
 
 // Admin akkauntlar qidiruvda ko'rinmaydi (leaderboard bilan bir xil)
 const HIDDEN_USERS = ['username'];
@@ -21,15 +23,18 @@ export async function GET(req) {
         await connectDB();
         const rx = new RegExp(escapeRegex(q), 'i');
 
+        // Admin bo'lmaganlar faqat nashr qilingan library'larning asosiy savollarini topadi
+        const visible = isAdmin(req) ? {} : { ...MAIN, $nor: [{ category: { $in: await unpublishedCategories() } }] };
+
         const [categories, questions, users] = await Promise.all([
             Question.aggregate([
-                { $match: { category: rx } },
+                { $match: { category: rx, ...visible } },
                 { $group: { _id: '$category', count: { $sum: 1 } } },
                 { $sort: { count: -1 } },
                 { $limit: 6 },
             ]),
             // Faqat savol matni — javob variantlari va to'g'ri javob qaytarilmaydi
-            Question.find({ question: rx })
+            Question.find({ question: rx, ...visible })
                 .select('question category difficulty')
                 .limit(5)
                 .lean(),

@@ -2,6 +2,7 @@ import { connectDB } from '../../config/mongodb.js';
 import { Question } from '../../models/Question.js';
 
 import { isAdmin } from '../../config/adminAuth.js';
+import { XP_MIN, XP_MAX, isValidXp } from '../../../../lib/quizRules.js';
 
 export async function PUT(req, { params }) {
     if (!isAdmin(req)) {
@@ -10,6 +11,9 @@ export async function PUT(req, { params }) {
     try {
         const { id } = await params;
         const body = await req.json();
+        if (body.xpReward !== undefined && !isValidXp(body.xpReward)) {
+            return new Response(JSON.stringify({ message: `XP ${XP_MIN}–${XP_MAX} oralig'ida bo'lsin` }), { status: 400 });
+        }
         await connectDB();
         const updated = await Question.findByIdAndUpdate(
             id,

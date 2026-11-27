@@ -365,17 +365,31 @@ function prepareJs(code) {
 
 /**
  * Funksiyani test-case'lar bilan tekshiradi.
- * @returns {Promise<{ passed:number, total:number, results:{ok:boolean,got:string}[], error?:string }>}
+ * `logs` — shu test paytida console.log / print orqali chiqqan qatorlar.
+ * @returns {Promise<{ passed:number, total:number, results:{ok:boolean,got:string,logs:{stream:string,text:string}[]}[], error?:string }>}
  */
 export async function runTests({ language, code, functionName, testCases }) {
     const total = testCases.length;
-    const results = Array.from({ length: total }, () => ({ ok: false, got: 'Bajarilmadi' }));
-    const onMsg = (m) => { if (m.type === 'case') results[m.i] = { ok: m.ok, got: m.got }; };
+    const results = Array.from({ length: total }, () => ({ ok: false, got: 'Bajarilmadi', logs: [] }));
+    // Chiqish har doim o'z testining natijasidan oldin keladi
+    let logs = [];
+    let finished = 0;
+    const onMsg = (m) => {
+        if (m.type === 'out' && logs.length < 100) logs.push({ stream: m.stream, text: String(m.text).slice(0, 2000) });
+        if (m.type === 'case') {
+            results[m.i] = { ok: m.ok, got: m.got, logs };
+            logs = [];
+            finished = m.i + 1;
+        }
+    };
     if (language === 'python') await callPy({ mode: 'load', code }, { totalMs: 60000 });
     const payload = { mode: 'test', code: language === 'python' ? code : prepareJs(code), functionName, testCases };
     const r = language === 'python'
-        ? await callPy(payload, { onMsg, idleMs: 4000 })
-        : await runInJsWorker(payload, { onMsg, idleMs: 3000 });
+        // totalMs: to'xtovsiz chop etadigan sikl "idle" cheklovidan o'tib ketmasligi uchun
+        ? await callPy(payload, { onMsg, idleMs: 4000, totalMs: 30000 })
+        : await runInJsWorker(payload, { onMsg, idleMs: 3000, totalMs: 20000 });
+    // To'xtab qolgan testning chiqishi ham yo'qolmasin
+    if (finished < total) results[finished].logs = logs;
     const error = r.fatal || (r.timedOut ? "Vaqt tugadi (cheksiz sikl bo'lishi mumkin)" : undefined);
     return { passed: results.filter(x => x.ok).length, total, results, error };
 }

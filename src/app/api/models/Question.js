@@ -15,6 +15,9 @@ const questionSchema = new mongoose.Schema({
     correctAnswer: { type: Number, required: true },
     xpReward: { type: Number, default: 0 },
     time: { type: Number, default: 30 },
+    // Eski savollarda bu maydon yo'q — ular asosiy library'da hisoblanadi
+    pool: { type: String, enum: ['main', 'extra'], default: 'main' },
+    source: { type: String, enum: ['admin', 'ai'], default: 'admin' },
     createdAt: { type: Date, default: Date.now }
 });
 

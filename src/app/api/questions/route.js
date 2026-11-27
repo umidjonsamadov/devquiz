@@ -2,6 +2,8 @@ import { connectDB } from '../config/mongodb.js';
 import { Question } from '../models/Question.js';
 
 import { isAdmin } from '../config/adminAuth.js';
+import { pickPool } from '../config/questionPool.js';
+import { XP_MIN, XP_MAX, isValidXp } from '../../../lib/quizRules.js';
 
 export async function POST(req) {
     try {
@@ -16,12 +18,17 @@ export async function POST(req) {
             return new Response(JSON.stringify({ message: 'Missing fields' }), { status: 400 });
         }
 
-        const existingCount = await Question.countDocuments({ category });
-        if (existingCount >= 31) {
-            return new Response(JSON.stringify({ message: 'Category already has maximum tests' }), { status: 400 });
+        if (!isValidXp(xpReward)) {
+            return new Response(JSON.stringify({ message: `XP ${XP_MIN}–${XP_MAX} oralig'ida bo'lsin` }), { status: 400 });
         }
 
-        const doc = await Question.create({ category, difficulty, question, options, correctAnswer, xpReward, time });
+        // Asosiy library (31) to'lsa, savol qo'shimcha library'ga (999) tushadi
+        const pool = await pickPool(category);
+        if (!pool) {
+            return new Response(JSON.stringify({ message: "Asosiy va qo'shimcha library to'lgan" }), { status: 400 });
+        }
+
+        const doc = await Question.create({ category, difficulty, question, options, correctAnswer, xpReward, time, pool });
         return new Response(JSON.stringify({ question: doc }), { status: 201 });
     } catch (error) {
         console.error('Create question error:', error);

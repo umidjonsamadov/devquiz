@@ -9,6 +9,7 @@ import {
     Pencil, Trash2, X,
 } from 'lucide-react';
 import { getStyle, ICONS, COLORS } from '../../lib/categoryStyle';
+import { MAIN_LIMIT, EXTRA_LIMIT, XP_MIN, XP_MAX, XP_BY_DIFFICULTY } from '../../lib/quizRules';
 
 const DIFFICULTIES = [
     { value: 'Easy',   label: 'Oson',  cls: 'border-green-600 bg-green-900/40 text-green-400',   dot: 'bg-green-400'  },
@@ -16,7 +17,7 @@ const DIFFICULTIES = [
     { value: 'Hard',   label: 'Qiyin', cls: 'border-red-600 bg-red-900/40 text-red-400',          dot: 'bg-red-400'    },
 ];
 
-const XP_PRESETS   = [5, 10, 15, 25, 50];
+const XP_PRESETS   = [25, 40, 50, 75, 100];
 const TIME_PRESETS = [15, 20, 30, 45, 60];
 const OPTION_LABELS = ['A', 'B', 'C', 'D'];
 
@@ -25,16 +26,19 @@ const EMPTY_FORM = {
     question: '',
     options: ['', '', '', ''],
     correct: 0,
-    xp: 10,
+    xp: XP_BY_DIFFICULTY.Easy,
     time: 30,
 };
 
 // ── Library card in the picker ─────────────────────────────────
 function LibraryCard({ lib, count, selected, onSelect }) {
     const { Icon, bg, border, color, selBorder } = getStyle(lib);
-    const full    = count >= 31;
-    const pct     = Math.min(100, ((count || 0) / 31) * 100);
-    const barCls  = full ? 'bg-red-500' : pct >= 60 ? 'bg-yellow-500' : 'bg-green-500';
+    const mainFull = count >= MAIN_LIMIT; // keyingi savollar qo'shimcha library'ga tushadi
+    const full    = mainFull && lib.extraCount >= EXTRA_LIMIT;
+    const pct     = mainFull
+        ? Math.min(100, ((lib.extraCount || 0) / EXTRA_LIMIT) * 100)
+        : Math.min(100, ((count || 0) / MAIN_LIMIT) * 100);
+    const barCls  = full ? 'bg-red-500' : mainFull ? 'bg-purple-500' : pct >= 60 ? 'bg-yellow-500' : 'bg-green-500';
 
     return (
         <button
@@ -69,7 +73,7 @@ function LibraryCard({ lib, count, selected, onSelect }) {
             <div className="w-full">
                 <div className="flex justify-between text-[10px] text-gray-600 mb-1">
                     <span className={selected ? color : ''}>{count || 0}</span>
-                    <span>31</span>
+                    <span>{mainFull && lib.extraCount !== undefined ? `+${lib.extraCount} qo'shimcha` : MAIN_LIMIT}</span>
                 </div>
                 <div className="h-1 bg-gray-800 rounded-full overflow-hidden">
                     <div className={`h-full rounded-full ${barCls}`} style={{ width: `${pct}%` }} />
@@ -90,7 +94,7 @@ function Preview({ form, library, libs }) {
     const hasContent = form.question.trim() || form.options.some(o => o.trim());
 
     return (
-        <div className="sticky top-6">
+        <div className="sticky top-[88px]">
             <div className="flex items-center gap-2 mb-3">
                 <Eye size={14} className="text-gray-500" />
                 <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Jonli ko&apos;rinish</p>
@@ -336,7 +340,9 @@ export default function CreateQuestionPage() {
             });
             const data = await res.json();
             if (res.ok) {
-                showToast('success', 'Savol muvaffaqiyatli yaratildi!');
+                showToast('success', data.question?.pool === 'extra'
+                    ? "Savol qo'shimcha library'ga qo'shildi!"
+                    : 'Savol muvaffaqiyatli yaratildi!');
                 // reset form but keep library, difficulty, xp, time
                 setForm(f => ({ ...EMPTY_FORM, difficulty: f.difficulty, xp: f.xp, time: f.time }));
                 loadCats();
@@ -354,6 +360,11 @@ export default function CreateQuestionPage() {
 
     const selectedLib  = libs.find(l => l.name === library);
     const selectedCount = catStats[library] || 0;
+    const toExtra = selectedCount >= MAIN_LIMIT;
+    const selectedExtra = selectedLib?.extraCount || 0;
+    const libraryFull = toExtra && selectedExtra >= EXTRA_LIMIT;
+    const shownCount = toExtra ? selectedExtra : selectedCount;
+    const shownLimit = toExtra ? EXTRA_LIMIT : MAIN_LIMIT;
 
     return (
         <div className="min-h-screen bg-gray-950 p-4 sm:p-6">
@@ -455,12 +466,12 @@ export default function CreateQuestionPage() {
                                     <div className="flex items-center gap-2 mt-0.5">
                                         <div className="flex-1 h-1 bg-gray-700 rounded-full overflow-hidden">
                                             <div
-                                                className={`h-full rounded-full ${selectedCount >= 31 ? 'bg-red-500' : selectedCount >= 20 ? 'bg-yellow-500' : 'bg-green-500'}`}
-                                                style={{ width: `${Math.min(100, (selectedCount / 31) * 100)}%` }}
+                                                className={`h-full rounded-full ${libraryFull ? 'bg-red-500' : toExtra ? 'bg-purple-500' : selectedCount >= 20 ? 'bg-yellow-500' : 'bg-green-500'}`}
+                                                style={{ width: `${Math.min(100, (shownCount / shownLimit) * 100)}%` }}
                                             />
                                         </div>
-                                        <span className={`text-xs font-semibold shrink-0 ${selectedCount >= 31 ? 'text-red-400' : 'text-gray-400'}`}>
-                                            {selectedCount} / 31 savol
+                                        <span className={`text-xs font-semibold shrink-0 ${libraryFull ? 'text-red-400' : toExtra ? 'text-purple-300' : 'text-gray-400'}`}>
+                                            {toExtra && "Qo'shimcha: "}{shownCount} / {shownLimit} savol
                                         </span>
                                     </div>
                                 </div>
@@ -489,7 +500,8 @@ export default function CreateQuestionPage() {
                                 <button
                                     key={d.value}
                                     type="button"
-                                    onClick={() => set('difficulty', d.value)}
+                                    // Daraja tanlanganda XP ham shunga moslanadi, keyin qo'lda o'zgartirsa bo'ladi
+                                    onClick={() => { set('difficulty', d.value); set('xp', XP_BY_DIFFICULTY[d.value]); }}
                                     className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl border text-sm font-semibold transition-all ${
                                         form.difficulty === d.value
                                             ? d.cls
@@ -570,7 +582,7 @@ export default function CreateQuestionPage() {
                                 <div className="relative mb-2">
                                     <Zap size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-green-400" />
                                     <input
-                                        type="number" min={0} max={100}
+                                        type="number" min={XP_MIN} max={XP_MAX}
                                         value={form.xp}
                                         onChange={e => set('xp', Number(e.target.value))}
                                         className="w-full bg-gray-800 border border-gray-700 text-white text-sm rounded-xl pl-9 pr-4 py-2.5 focus:outline-none focus:border-green-600 transition-colors"
@@ -619,7 +631,7 @@ export default function CreateQuestionPage() {
                     {/* ── Submit ── */}
                     <button
                         type="submit"
-                        disabled={submitting || !library || selectedCount >= 31}
+                        disabled={submitting || !library || libraryFull}
                         className="w-full flex items-center justify-center gap-2 bg-green-600 hover:bg-green-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold py-3.5 rounded-xl transition-all duration-200 hover:shadow-lg hover:shadow-green-900/30 active:scale-[0.98]"
                     >
                         {submitting ? (
@@ -635,7 +647,7 @@ export default function CreateQuestionPage() {
                         ) : (
                             <>
                                 <Plus size={16} />
-                                {library} ga savol qo&apos;shish
+                                {library}{toExtra ? " qo'shimcha" : ''} ga savol qo&apos;shish
                             </>
                         )}
                     </button>

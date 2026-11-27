@@ -1,7 +1,8 @@
 import { connectDB } from '../../config/mongodb.js';
 import { Question } from '../../models/Question.js';
 import { QuizAttempt } from '../../models/QuizAttempt.js';
-import { parseSession } from '../../config/adminAuth.js';
+import { parseSession, ADMIN_USERNAME } from '../../config/adminAuth.js';
+import { recordSolves, unpublishedCategories } from '../../config/questionPool.js';
 
 const json = (body, status = 200) => new Response(JSON.stringify(body), { status });
 
@@ -19,7 +20,8 @@ export async function POST(req) {
 
         const ids = answers.map(a => String(a.questionId));
         const qs = await Question.find({ _id: { $in: ids } }).lean();
-        const byId = new Map(qs.map(q => [String(q._id), q]));
+        const closed = new Set(session.username === ADMIN_USERNAME ? [] : await unpublishedCategories());
+        const byId = new Map(qs.filter(q => !closed.has(q.category)).map(q => [String(q._id), q]));
 
         let correct = 0, incorrect = 0, unanswered = 0, xpEarned = 0;
         const saved = [];
@@ -42,6 +44,8 @@ export async function POST(req) {
             username: session.username, category: String(category),
             correct, incorrect, unanswered, xpEarned, answers: saved,
         });
+        // Javob berilgan har bir savol "yechildi" deb sanaladi (to'g'ri yoki noto'g'ri)
+        await recordSolves(session.username, saved.filter(a => a.choice !== null).map(a => a.questionId));
         return json({ ok: true });
     } catch (e) {
         console.error('QuizAttempt POST error:', e);

@@ -1,6 +1,6 @@
 'use client';
 
-import { Zap } from 'lucide-react';
+import { Zap, Crown } from 'lucide-react';
 import Link from 'next/link';
 import HeaderSearch from './search';
 import NotificationBell from './notificationBell';
@@ -20,9 +20,14 @@ function getLevelProgress(xp) {
 
 export default function Header({ onToggle }) {
     const [user, setUser] = useState(null);
+    const [boost, setBoost] = useState(null); // 1-o'rin uchun 2x XP
 
     useEffect(() => {
         async function fetchUser() {
+            fetch('/api/user/boost')
+                .then(res => (res.ok ? res.json() : null))
+                .then(d => d && setBoost(d))
+                .catch(() => {});
             try {
                 const res = await fetch('/api/auth/me');
                 if (res.ok) {
@@ -50,7 +55,7 @@ export default function Header({ onToggle }) {
     const { level, percent } = getLevelProgress(xp);
 
     return (
-        <header className="h-16 md:h-16 bg-gray-900 border-b border-gray-800 flex items-center justify-between px-4 sm:px-6 shrink-0">
+        <header className="sticky top-0 z-40 has-[[data-overlay]]:z-[60] h-16 bg-gray-900 border-b border-gray-800 flex items-center justify-between px-4 sm:px-6 shrink-0">
             {/* Left */}
             <div className="flex items-center gap-3 sm:gap-6">
                 <svg
@@ -76,6 +81,14 @@ export default function Header({ onToggle }) {
 
             {/* Right */}
             <div className="flex items-center gap-3 sm:gap-6">
+                {boost?.multiplier > 1 && (
+                    <Link href="/leaderboard"
+                        title={`${boost.reason === 'train' ? 'Train' : 'XP'} reytingida 1-o'rindasiz: ishlagan XP'ingiz ${boost.multiplier} barobar qo'shiladi`}
+                        className="flex items-center gap-1 bg-amber-400/15 border border-amber-400/50 text-amber-300 text-xs sm:text-sm font-bold px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg whitespace-nowrap shrink-0 no-underline">
+                        <Crown size={12} /> {boost.multiplier}x<span className="hidden sm:inline"> XP</span>
+                    </Link>
+                )}
+
                 {/* Daily XP */}
                 <div className="flex items-center gap-1 sm:gap-1.5 bg-green-950 border border-green-900 text-green-400 text-xs sm:text-sm font-semibold px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg whitespace-nowrap shrink-0">
                     <Zap size={12} />

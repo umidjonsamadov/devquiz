@@ -30,6 +30,7 @@ import {
 } from 'lucide-react';
 import ExamRankingAdmin from '../../components/ExamRankingAdmin';
 import QuizAttemptsAdmin from '../../components/QuizAttemptsAdmin';
+import AiGeneratorAdmin from '../../components/AiGeneratorAdmin';
 import { formatDuration, isOnlineNow } from '../../lib/formatDuration';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -678,6 +679,9 @@ export default function AdminPage() {
                     <TopUsers users={top5} loading={statsLoading} />
                 </div>
             </div>
+
+            {/* ── AI savol generatori ─────────────────────────────────── */}
+            <AiGeneratorAdmin />
 
             {/* ── Exam ranking ────────────────────────────────────────── */}
             <ExamRankingAdmin />

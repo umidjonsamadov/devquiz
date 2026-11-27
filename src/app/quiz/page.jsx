@@ -3,16 +3,22 @@
 import { useEffect, useState, useMemo } from 'react';
 import Link from 'next/link';
 import { Search, X, ChevronRight, Library, Zap } from 'lucide-react';
+import { ComingSoonCard } from '../../components/comingSoon';
 import { getStyle } from '../../lib/categoryStyle';
+import { MAIN_LIMIT, EXTRA_SUFFIX } from '../../lib/quizRules';
 
 function LibraryCard({ lib }) {
     const { Icon, color, bg, border, glow, accent } = getStyle(lib);
     const dc = lib.diffCounts || { Easy: 0, Medium: 0, Hard: 0 };
+    const href = `/quiz/${encodeURIComponent(lib.name)}`;
+    if (lib.comingSoon) return <ComingSoonCard lib={lib} />;
+    const draft = lib.published === false; // faqat admin ko'radi
 
     return (
+        <div className="relative flex">
         <Link
-            href={`/quiz/${encodeURIComponent(lib.name)}`}
-            className={`group relative flex flex-col bg-gray-900 border ${border} ${glow} rounded-2xl overflow-hidden
+            href={href}
+            className={`group relative flex flex-1 flex-col bg-gray-900 border ${border} ${glow} rounded-2xl overflow-hidden
                 transition-all duration-300 hover:-translate-y-1 hover:shadow-2xl`}
         >
             {/* Top gradient accent */}
@@ -24,9 +30,9 @@ function LibraryCard({ lib }) {
                     <div className={`w-12 h-12 rounded-xl ${bg} border ${border} flex items-center justify-center shrink-0 transition-transform duration-300 group-hover:scale-110`}>
                         <Icon className={`w-6 h-6 ${color}`} />
                     </div>
-                    <div className={`flex items-center gap-1 text-xs font-bold px-2 py-1 rounded-xl ${bg} ${color} border ${border}`}>
+                    <div className={`flex items-center gap-1 text-xs font-bold px-2 py-1 rounded-xl border ${draft ? 'bg-yellow-900/40 text-yellow-300 border-yellow-700/60' : `${bg} ${color} ${border}`}`}>
                         <Library size={10} />
-                        Library
+                        {draft ? 'Nashr qilinmagan' : 'Library'}
                     </div>
                 </div>
 
@@ -51,7 +57,7 @@ function LibraryCard({ lib }) {
                 <div className="mb-4">
                     <div className="flex justify-between text-xs text-gray-600 mb-1">
                         <span>Savol to'ldirilishi</span>
-                        <span>{Math.min(lib.count, 31)}/31</span>
+                        <span>{Math.min(lib.count, MAIN_LIMIT)}/{MAIN_LIMIT}</span>
                     </div>
                     <div className="h-1.5 bg-gray-800 rounded-full overflow-hidden">
                         <div
@@ -60,7 +66,7 @@ function LibraryCard({ lib }) {
                                 dc.Medium > 0 ? 'from-yellow-600 to-yellow-400' :
                                 'from-green-600 to-green-400'
                             }`}
-                            style={{ width: `${Math.min(100, (Math.min(lib.count, 31) / 31) * 100)}%` }}
+                            style={{ width: `${Math.min(100, (lib.count / MAIN_LIMIT) * 100)}%` }}
                         />
                     </div>
                 </div>
@@ -77,6 +83,15 @@ function LibraryCard({ lib }) {
                 </div>
             </div>
         </Link>
+        {/* Faqat adminga: server extraCount'ni boshqalarga yubormaydi. Havola ichida havola bo'lmasligi uchun tashqarida */}
+        {lib.extraCount > 0 && (
+            <Link href={`${href}?pool=extra`}
+                className="absolute top-[52px] right-5 z-10 flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-lg
+                    bg-purple-900/60 border border-purple-700/70 text-purple-200 hover:bg-purple-800 transition-colors">
+                {EXTRA_SUFFIX} {lib.extraCount} <ChevronRight size={11} />
+            </Link>
+        )}
+        </div>
     );
 }
 
@@ -89,16 +104,19 @@ export default function QuizLibraryPage() {
     useEffect(() => {
         fetch('/api/categories')
             .then(r => r.ok ? r.json() : null)
-            .then(d => { if (d) setLibs((d.categories || []).filter(c => c.count > 0)); })
+            .then(d => {
+                // Nashr qilinmaganlar bo'sh bo'lsa ham ko'rinadi: boshqalarga "Coming soon", adminga tekshiruv uchun
+                if (d) setLibs((d.categories || []).filter(c => c.count > 0 || c.extraCount > 0 || c.comingSoon || c.published === false));
+            })
             .catch(console.error)
             .finally(() => setLoading(false));
     }, []);
 
     const filtered = useMemo(() => {
         let list = [...libs];
-        if (diffFilter !== 'All') list = list.filter(l => l.difficulty === diffFilter);
+        if (diffFilter !== 'All') list = list.filter(l => !l.comingSoon && l.difficulty === diffFilter);
         if (search.trim()) list = list.filter(l => l.name.toLowerCase().includes(search.trim().toLowerCase()));
-        return list.sort((a, b) => a.name.localeCompare(b.name));
+        return list.sort((a, b) => Number(!!a.comingSoon) - Number(!!b.comingSoon) || a.name.localeCompare(b.name));
     }, [libs, diffFilter, search]);
 
     const totalQuestions = libs.reduce((s, l) => s + l.count, 0);
@@ -137,7 +155,7 @@ export default function QuizLibraryPage() {
             </div>
 
             {/* Sticky filter bar */}
-            <div className="sticky top-0 z-20 bg-gray-950/95 backdrop-blur border-b border-gray-800/60 px-4 sm:px-6 py-2.5">
+            <div className="sticky top-16 z-20 bg-gray-950/95 backdrop-blur border-b border-gray-800/60 px-4 sm:px-6 py-2.5">
                 <div className="flex gap-2 items-center">
                     {/* Search */}
                     <div className="relative flex-1 max-w-sm">

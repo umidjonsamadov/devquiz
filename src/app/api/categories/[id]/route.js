@@ -10,7 +10,7 @@ export async function PUT(req, { params }) {
     if (!isAdmin(req)) return json({ message: "Ruxsat yo'q" }, 403);
     try {
         const { id } = await params;
-        const { name, icon, color, description } = await req.json();
+        const { name, icon, color, description, published } = await req.json();
         await connectDB();
         const cat = await Category.findById(id);
         if (!cat) return json({ message: 'Library topilmadi' }, 404);
@@ -26,6 +26,12 @@ export async function PUT(req, { params }) {
         if (icon) cat.icon = icon;
         if (color) cat.color = color;
         if (description != null) cat.description = description;
+        if (typeof published === 'boolean') {
+            if (published && !(await Question.exists({ category: cat.name }))) {
+                return json({ message: "Bo'sh library'ni nashr qilib bo'lmaydi: avval savol qo'shing" }, 400);
+            }
+            cat.published = published;
+        }
         await cat.save();
         return json({ category: cat });
     } catch (e) {

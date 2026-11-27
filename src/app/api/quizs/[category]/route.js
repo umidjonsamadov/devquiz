@@ -1,68 +1,59 @@
 import { connectDB } from '../../config/mongodb.js';
 import { Question } from '../../models/Question.js';
+import { Category } from '../../models/Category.js';
+import { parseSession, ADMIN_USERNAME } from '../../config/adminAuth.js';
+import { MAIN, EXTRA, userLibrary } from '../../config/questionPool.js';
+import { QUIZ_SIZE } from '../../../../lib/quizRules.js';
 
+const json = (body, status = 200) => new Response(JSON.stringify(body), { status });
+const escapeRegExp = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+// ?pool=extra — qo'shimcha library, ?all=1 — library ro'yxati (aks holda quiz uchun tasodifiy savollar)
 export async function GET(req, { params }) {
     try {
-        await connectDB();
-
-        // Unwrap the Promise for params
-        const resolvedParams = await params;
-
-        // Prefer resolvedParams.category, but fall back to parsing the request URL
-        let category = resolvedParams && resolvedParams.category;
-
-        if (!category) {
-            try {
-                // req.nextUrl is available in Next; fallback to URL parsing
-                const pathname = req.nextUrl?.pathname || new URL(req.url).pathname;
-                // pathname like /api/quizs/Python -> split and take last segment
-                const parts = pathname.split('/').filter(Boolean);
-                category = parts[parts.length - 1];
-            } catch (e) {
-                category = null;
-            }
-        }
-
-        if (!category) {
-            console.error('[quizs/category] missing category param. req.url=', req.url);
-            return new Response(JSON.stringify({ message: 'Missing category', url: req.url }), { status: 400 });
-        }
-
-        // params may be URL-encoded; decode and normalize
-        try { category = decodeURIComponent(category); } catch (e) {}
-        const normalized = category.trim();
-
-        // helper to escape regex special chars
-        const escapeRegExp = (s) => s.replace(/[.*+?^${}()|[\\]\\]/g, '\\$&');
-        const categoryRegex = new RegExp(`^${escapeRegExp(normalized)}$`, 'i');
-
-        console.log('[quizs/category] request for category:', { raw: resolvedParams?.category, decoded: category, normalized, url: req.url });
-
         const url = new URL(req.url);
-        const allMode = url.searchParams.get('all') === '1';
+        let { category } = await params;
+        try { category = decodeURIComponent(category); } catch {}
+        category = (category || '').trim();
+        if (!category) return json({ message: 'Missing category' }, 400);
 
-        if (allMode) {
-            // Library view: return all questions sorted by difficulty
-            const diffOrder = { Easy: 0, Medium: 1, Hard: 2 };
-            const qs = await Question.find({ category: categoryRegex })
-                .sort({ createdAt: -1 })
-                .lean();
-            qs.sort((a, b) => (diffOrder[a.difficulty] ?? 0) - (diffOrder[b.difficulty] ?? 0));
-            return new Response(JSON.stringify({ questions: qs }), { status: 200 });
+        await connectDB();
+        const filter = new RegExp(`^${escapeRegExp(category)}$`, 'i');
+        const pool = url.searchParams.get('pool') === 'extra' ? 'extra' : 'main';
+        const username = parseSession(req.headers.get('cookie'))?.username;
+
+        const admin = username === ADMIN_USERNAME;
+        const library = await Category.findOne({ name: filter }).select('published').lean();
+        const published = library?.published !== false;
+        if (!published && !admin) return json({ message: 'Bu quiz tez orada qo\'shiladi', comingSoon: true }, 403);
+
+        if (pool === 'extra' && username !== ADMIN_USERNAME) return json({ message: "Ruxsat yo'q" }, 403);
+
+        // Admin hamma savolni ko'radi (tahrirlash uchun), unga almashtirish qo'llanmaydi
+        let result;
+        if (username === ADMIN_USERNAME) {
+            const questions = await Question.find({ category: filter, ...(pool === 'extra' ? EXTRA : MAIN) }).lean();
+            result = { questions, hidden: 0, replaced: 0 };
+        } else {
+            result = await userLibrary(filter, pool, username);
+        }
+        const { questions, hidden, replaced } = result;
+
+        if (url.searchParams.get('all') === '1') {
+            const order = { Easy: 0, Medium: 1, Hard: 2 };
+            questions.sort((a, b) => (order[a.difficulty] ?? 0) - (order[b.difficulty] ?? 0)
+                || new Date(b.createdAt) - new Date(a.createdAt));
+            // Nashr tugmasi uchun holat faqat adminga
+            return json({ questions, hidden, replaced, ...(admin && library && { library: { id: String(library._id), published } }) });
         }
 
-        // Quiz mode: butun bazadan tasodifiy 31 tagacha savol
-        const qs = await Question.find({ category: categoryRegex }).lean();
-
-        // shuffle for randomness
-        for (let i = qs.length - 1; i > 0; i--) {
+        for (let i = questions.length - 1; i > 0; i--) {
             const j = Math.floor(Math.random() * (i + 1));
-            [qs[i], qs[j]] = [qs[j], qs[i]];
+            [questions[i], questions[j]] = [questions[j], questions[i]];
         }
-
-        return new Response(JSON.stringify({ questions: qs.slice(0, 31) }), { status: 200 });
+        return json({ questions: questions.slice(0, QUIZ_SIZE), hidden, replaced });
     } catch (err) {
         console.error('Get category questions error:', err);
-        return new Response(JSON.stringify({ message: 'Server error' }), { status: 500 });
+        return json({ message: 'Server error' }, 500);
     }
 }

@@ -17,6 +17,7 @@ const PAGES = [
     { label: 'Sozlamalar', route: '/settings', icon: Settings, keywords: 'settings parol avatar' },
     { label: 'Savol yaratish', route: '/create', icon: PlusIcon, keywords: 'create question yangi', admin: true },
     { label: 'Admin Panel', route: '/admin', icon: Shield, keywords: 'admin boshqaruv', admin: true },
+    { label: 'Qoida buzarliklar', route: '/violations', icon: Shield, keywords: 'violations screenshot copy nusxa', admin: true },
 ];
 
 const AVATAR_BG = {
@@ -298,7 +299,10 @@ function SearchPanel({ isAdmin, onClose, autoFocus, variant }) {
                 )}
             </div>
 
-            <div ref={listRef} className="flex-1 overflow-y-auto overscroll-contain">
+            <div ref={listRef} className={`flex-1 overflow-y-auto overscroll-contain ${isAdmin ? '' : 'select-none [-webkit-touch-callout:none]'}`}
+                onCopy={isAdmin ? undefined : (e) => e.preventDefault()}
+                onContextMenu={isAdmin ? undefined : (e) => e.preventDefault()}
+                onDragStart={isAdmin ? undefined : (e) => e.preventDefault()}>
                 <SearchResults query={query} isAdmin={isAdmin} onSelect={select} activeIndex={activeIndex}
                     setActiveIndex={setActiveIndex} items={items} loading={loading} error={error} />
             </div>
@@ -385,7 +389,7 @@ export default function HeaderSearch({ isAdmin = false }) {
 
             {/* Telefon / planshet: to'liq ekranli qidiruv */}
             {mobileOpen && (
-                <div className="lg:hidden fixed inset-0 z-[300] flex flex-col sm:items-center sm:justify-start sm:pt-[10vh] sm:px-4">
+                <div data-overlay className="lg:hidden fixed inset-0 z-[300] flex flex-col sm:items-center sm:justify-start sm:pt-[10vh] sm:px-4">
                     <div className="absolute inset-0 bg-black/70 backdrop-blur-sm hidden sm:block" onClick={close} />
                     <div className="relative w-full h-full sm:h-auto sm:max-h-[75vh] sm:max-w-xl bg-gray-900 sm:border sm:border-gray-700 sm:rounded-2xl overflow-hidden shadow-2xl flex flex-col">
                         <SearchPanel isAdmin={isAdmin} onClose={close} autoFocus variant="mobile" />

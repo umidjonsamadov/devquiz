@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { ClipboardList, RefreshCw, Search, ChevronDown, Check, X, Minus } from "lucide-react";
+import AdminPagination, { usePagination } from "./adminPagination";
 
 export default function QuizAttemptsAdmin() {
     const [attempts, setAttempts] = useState([]);
@@ -25,6 +26,8 @@ export default function QuizAttemptsAdmin() {
         return attempts.filter((a) => !s || a.username.toLowerCase().includes(s) || a.category.toLowerCase().includes(s));
     }, [attempts, q]);
 
+    const { pageItems, pager, reset } = usePagination(rows, 10);
+
     return (
         <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
             <div className="flex items-center justify-between px-5 py-4 border-b border-gray-800 flex-wrap gap-3">
@@ -36,7 +39,7 @@ export default function QuizAttemptsAdmin() {
                 <div className="flex items-center gap-2">
                     <div className="relative">
                         <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
-                        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Foydalanuvchi yoki kategoriya…"
+                        <input value={q} onChange={(e) => { setQ(e.target.value); reset(); }} placeholder="Foydalanuvchi yoki kategoriya…"
                             className="pl-8 pr-3 py-1.5 bg-gray-800 border border-gray-700 rounded-lg text-xs text-white placeholder-gray-500 focus:outline-none focus:border-green-600" />
                     </div>
                     <button onClick={load} disabled={loading} className="flex items-center gap-1.5 text-xs text-gray-300 hover:text-white border border-gray-700 rounded-lg px-2.5 py-1.5 disabled:opacity-50">
@@ -50,7 +53,7 @@ export default function QuizAttemptsAdmin() {
                 {!err && !loading && rows.length === 0 && <p className="text-gray-500 text-sm text-center py-8">Hali quiz javoblari yo&apos;q</p>}
 
                 <div className="border border-gray-800 rounded-xl overflow-hidden empty:hidden">
-                    {rows.map((a) => {
+                    {pageItems.map((a) => {
                         const isOpen = open === a._id;
                         const total = a.correct + a.incorrect + a.unanswered;
                         const pct = total ? Math.round((a.correct / total) * 100) : 0;
@@ -98,6 +101,7 @@ export default function QuizAttemptsAdmin() {
                         );
                     })}
                 </div>
+                <AdminPagination {...pager} className="mt-3" />
                 <p className="text-[11px] text-gray-600 mt-2">Oxirgi 200 ta urinish ko&apos;rsatiladi.</p>
             </div>
         </div>

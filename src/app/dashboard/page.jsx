@@ -11,6 +11,7 @@ function computeLevel(xp) {
 import StatsCards from '@/components/dashboard/statsCards';
 import ActivityChart from '@/components/dashboard/activityChart';
 import TimeRewards from '@/components/dashboard/timeRewards';
+import useContentGuard from '@/lib/useContentGuard';
 
 const difficultyStyle = {
     Easy:   'bg-green-900/40 text-green-400',
@@ -74,6 +75,7 @@ export default function Dashboard() {
     }, []);
 
     const question  = questions[qIndex];
+    useContentGuard(!!question && !!user && user.name !== 'username', () => ({ source: 'dashboard', itemId: question?._id || '' }));
     const userLevel = computeLevel(user?.totalXp || 0);
     const showRank  = userLevel >= 2;
 
@@ -163,7 +165,7 @@ export default function Dashboard() {
                     />
 
                     {/* Quick Quiz */}
-                    <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4 sm:p-6">
+                    <div data-guard-zone className="bg-gray-900 border border-gray-800 rounded-2xl p-4 sm:p-6">
                         <div className="flex items-center justify-between mb-4">
                             <h3 className="font-semibold text-white text-sm sm:text-base">Tez Quiz</h3>
                             <span className="flex items-center gap-1 text-gray-400 text-xs">
@@ -196,7 +198,7 @@ export default function Dashboard() {
                                     </div>
                                 </div>
 
-                                <p className="text-white font-medium mb-3 text-sm sm:text-base">{question.question}</p>
+                                <p className="text-white font-medium mb-3 text-sm sm:text-base whitespace-pre-wrap break-words">{question.question}</p>
 
                                 {question.code && (
                                     <div className="bg-gray-800 rounded-xl p-3 mb-3">

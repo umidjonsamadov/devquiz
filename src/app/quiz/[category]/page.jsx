@@ -1,14 +1,19 @@
 "use client";
 
 import { useEffect, useRef, useState, useMemo } from 'react';
-import { useRouter, useParams } from 'next/navigation';
+import { useRouter, useParams, useSearchParams } from 'next/navigation';
+import Link from 'next/link';
 import {
     Check, ChevronRight, X, Zap, ArrowLeft, Trophy, Clock,
     BookOpen, Code, Globe, Cpu, Database, Layout, Shield,
     Terminal, FileCode, Layers, Box, Search, Play,
     Target, Flame, Library, Pencil, Trash2, Save, Loader2,
-    ShieldCheck, Eye, EyeOff,
+    ShieldCheck, Eye, EyeOff, Sparkles,
 } from 'lucide-react';
+import { ComingSoonPage } from '@/components/comingSoon';
+import useContentGuard from '@/lib/useContentGuard';
+import PublishBar from '@/components/publishBar';
+import { XP_MIN, XP_MAX, XP_BY_DIFFICULTY, normalizeXp, EXTRA_SUFFIX, MAIN_LIMIT, EXTRA_LIMIT, MAX_SOLVES } from '@/lib/quizRules';
 import ResultsSummary from '@/components/ResultsSummary';
 import { optionOrder } from '@/lib/shuffle';
 
@@ -47,7 +52,7 @@ function EditModal({ q, onSave, onClose }) {
     const [options,       setOptions]       = useState([...q.options]);
     const [correctAnswer, setCorrectAnswer] = useState(q.correctAnswer);
     const [difficulty,    setDifficulty]    = useState(q.difficulty);
-    const [xpReward,      setXpReward]      = useState(q.xpReward);
+    const [xpReward,      setXpReward]      = useState(() => normalizeXp(q.xpReward, q.difficulty));
     const [time,          setTime]          = useState(q.time);
     const [saving,        setSaving]        = useState(false);
     const [err,           setErr]           = useState('');
@@ -135,7 +140,7 @@ function EditModal({ q, onSave, onClose }) {
                             <label className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1.5 block">Daraja</label>
                             <div className="flex flex-col gap-1">
                                 {DIFFICULTIES.map(d => (
-                                    <button key={d} type="button" onClick={() => setDifficulty(d)}
+                                    <button key={d} type="button" onClick={() => { setDifficulty(d); setXpReward(XP_BY_DIFFICULTY[d]); }}
                                         className={`py-1.5 rounded-lg border text-xs font-semibold transition-all ${difficulty === d ? diffCls[d] : 'border-gray-700 bg-gray-800 text-gray-500 hover:border-gray-600'}`}>
                                         {DIFF_LABELS[d]}
                                     </button>
@@ -144,7 +149,7 @@ function EditModal({ q, onSave, onClose }) {
                         </div>
                         <div>
                             <label className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1.5 block">XP</label>
-                            <input type="number" min={0} max={100} value={xpReward} onChange={e => setXpReward(+e.target.value)}
+                            <input type="number" min={XP_MIN} max={XP_MAX} value={xpReward} onChange={e => setXpReward(+e.target.value)}
                                 className="w-full bg-gray-800 border border-gray-700 text-white text-sm rounded-xl px-3 py-2 focus:outline-none focus:border-green-600 transition-colors" />
                         </div>
                         <div>
@@ -190,13 +195,13 @@ function QuestionCard({ q, index, isAdmin, onEdit, onDelete }) {
     };
 
     return (
-        <div className={`border rounded-xl p-3.5 transition-all duration-200 ${
+        <div data-guard-item={q._id} className={`border rounded-xl p-3.5 transition-all duration-200 ${
             isAdmin ? 'bg-gray-800/80 border-gray-600/60' : 'bg-gray-800/60 border-gray-700/60'
         }`}>
             <div className="flex items-start gap-2.5">
                 <span className="text-xs font-bold text-gray-600 mt-0.5 shrink-0 w-5">{index + 1}.</span>
                 <div className="flex-1 min-w-0">
-                    <p className="text-sm text-gray-200 leading-relaxed">
+                    <p className="text-sm text-gray-200 leading-relaxed whitespace-pre-wrap break-words">
                         {isAdmin ? q.question : preview}
                     </p>
 
@@ -225,6 +230,11 @@ function QuestionCard({ q, index, isAdmin, onEdit, onDelete }) {
                 <span className={`text-xs px-2 py-0.5 rounded-lg font-semibold flex items-center gap-1 ${diff.cls}`}>
                     <span className={`w-1.5 h-1.5 rounded-full ${diff.dot}`} />{diff.label}
                 </span>
+                {isAdmin && q.source === 'ai' && (
+                    <span className="flex items-center gap-1 text-xs px-2 py-0.5 rounded-lg font-semibold bg-purple-900/30 border border-purple-800/50 text-purple-300">
+                        <Sparkles size={10} /> AI
+                    </span>
+                )}
                 {q.xpReward > 0 && (
                     <span className="flex items-center gap-1 text-xs text-green-400 font-semibold">
                         <Zap size={10} /> +{q.xpReward} XP
@@ -266,6 +276,16 @@ export default function QuizCategoryPage() {
     const routeParams = useParams();
     const category = decodeURIComponent(routeParams?.category || '');
     const router = useRouter();
+    const pool = useSearchParams().get('pool') === 'extra' ? 'extra' : 'main';
+    const isExtra = pool === 'extra';
+    const title = isExtra ? `${category} ${EXTRA_SUFFIX}` : category;
+    const apiUrl = `/api/quizs/${encodeURIComponent(category)}?pool=${pool}`;
+    const [rotation, setRotation] = useState({ hidden: 0, replaced: 0 });
+    const [reloadKey, setReloadKey] = useState(0);
+    const [aiOnly, setAiOnly] = useState(false);
+    const attemptRef = useRef(Promise.resolve()); // oxirgi urinish saqlanishini kutish uchun
+    const [comingSoon, setComingSoon] = useState(false);
+    const [library, setLibrary] = useState(null); // { id, published } — faqat adminga keladi
 
     // mode: 'library' | 'quiz' | 'results'
     const [mode, setMode] = useState('library');
@@ -286,6 +306,7 @@ export default function QuizCategoryPage() {
     const [answers, setAnswers]   = useState([]); // answers[i] = tanlangan variant indeksi yoki null
     const [quizLoading, setQuizLoading] = useState(false);
     const countsRef = useRef({ correct: 0, incorrect: 0, unanswered: 0, xpEarned: 0 });
+    const [bonusXp, setBonusXp] = useState(0); // 1-o'rin uchun qo'shimcha XP
     const finishedRef = useRef(false);
     const [timeLeft, setTimeLeft] = useState(null);
     const timerRef = useRef(null);
@@ -303,20 +324,34 @@ export default function QuizCategoryPage() {
     useEffect(() => {
         if (!category) return;
         setLibLoading(true);
-        fetch(`/api/quizs/${encodeURIComponent(category)}?all=1`)
-            .then(r => r.ok ? r.json() : null)
-            .then(d => { if (d) setAllQuestions(d.questions || []); })
+        fetch(`${apiUrl}&all=1`)
+            .then(async r => {
+                if (r.status === 403) {
+                    const body = await r.json().catch(() => ({}));
+                    if (body.comingSoon) setComingSoon(true);
+                    // Qo'shimcha library faqat adminga: boshqalar asosiy quizga qaytadi
+                    else router.replace(`/quiz/${encodeURIComponent(category)}`);
+                }
+                return r.ok ? r.json() : null;
+            })
+            .then(d => {
+                if (!d) return;
+                setAllQuestions(d.questions || []);
+                setLibrary(d.library || null);
+                setRotation({ hidden: d.hidden || 0, replaced: d.replaced || 0 });
+            })
             .catch(console.error)
             .finally(() => setLibLoading(false));
-    }, [category]);
+    }, [category, apiUrl, reloadKey]);
 
     // filtered questions for library
     const filteredQuestions = useMemo(() => {
         let list = [...allQuestions];
         if (diffFilter !== 'All') list = list.filter(q => q.difficulty === diffFilter);
+        if (aiOnly) list = list.filter(q => q.source === 'ai');
         if (search.trim()) list = list.filter(q => q.question.toLowerCase().includes(search.trim().toLowerCase()));
         return list;
-    }, [allQuestions, diffFilter, search]);
+    }, [allQuestions, diffFilter, search, aiOnly]);
 
     // admin handlers
     function handleSaveEdit(updated) {
@@ -332,7 +367,9 @@ export default function QuizCategoryPage() {
         setQuizLoading(true);
         let qs = [];
         try {
-            const res = await fetch(`/api/quizs/${encodeURIComponent(category)}`);
+            // Yechilgan savollar hisobga olinishi uchun avvalgi urinish saqlanib bo'lishini kutamiz
+            await attemptRef.current;
+            const res = await fetch(apiUrl);
             if (res.ok) {
                 const data = await res.json();
                 // variantlar ham har safar har xil tartibda chiqadi
@@ -354,6 +391,13 @@ export default function QuizCategoryPage() {
     const isLastQ    = index === total - 1;
     const progress   = total ? ((index + 1) / total) * 100 : 0;
 
+    useContentGuard(mode !== 'results' && !isAdmin && !comingSoon, (target) => ({
+        source: 'quiz',
+        // Ro'yxatda savol ustiga tegilganidan, yechishda esa ekrandagi savoldan aniqlanadi
+        itemId: mode === 'quiz' ? current?._id || '' : target?.closest?.('[data-guard-item]')?.dataset.guardItem || '',
+        context: category,
+    }));
+
     const selected = answers[index] ?? null;
 
     // Natijalar faqat yakunda, javoblar massividan bir marta hisoblanadi
@@ -373,29 +417,35 @@ export default function QuizCategoryPage() {
             else counts.incorrect += 1;
             activityPayloads.push({ xpReward, correct });
         });
+        setBonusXp(0);
         // Ketma-ket yuboramiz (parallel so'rovlar bir-birining XP'sini ustidan yozib yuborardi),
         // tugagach header'ga XP yangilanganini xabar beramiz.
         (async () => {
             for (const payload of activityPayloads) {
                 try {
-                    await fetch('/api/user/activity', {
+                    const res = await fetch('/api/user/activity', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify(payload),
                     });
+                    const { xpMultiplier = 1 } = await res.json();
+                    // Faqat shu urinish hali ekranda bo'lsa qo'shamiz
+                    if (xpMultiplier > 1 && countsRef.current === counts) {
+                        setBonusXp(b => b + payload.xpReward * (xpMultiplier - 1));
+                    }
                 } catch {}
             }
             window.dispatchEvent(new Event('user-updated'));
         })();
         // admin ko'rishi uchun butun urinishni (javoblari bilan) saqlash
-        fetch('/api/user/quiz-attempt', {
+        attemptRef.current = fetch('/api/user/quiz-attempt', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 category,
                 answers: questions.map((q, i) => ({ questionId: q._id, choice: answers[i] ?? null })),
             }),
-        }).catch(() => {});
+        }).catch(() => {}).then(() => setReloadKey(k => k + 1));
         countsRef.current = counts;
         setMode('results');
     };
@@ -445,7 +495,7 @@ export default function QuizCategoryPage() {
                 correctAnswers={countsRef.current.correct}
                 incorrectAnswers={countsRef.current.incorrect}
                 unanswered={countsRef.current.unanswered}
-                earnedXp={countsRef.current.xpEarned}
+                earnedXp={countsRef.current.xpEarned + bonusXp}
                 category={category}
                 onRetry={handleRetry}
                 onHome={() => { setMode('library'); router.push('/quiz'); }}
@@ -478,7 +528,7 @@ export default function QuizCategoryPage() {
                                     <ArrowLeft size={15} />
                                 </button>
                                 <div className="min-w-0">
-                                    <p className="text-white font-semibold text-sm leading-tight truncate max-w-[120px] sm:max-w-none">{category}</p>
+                                    <p className="text-white font-semibold text-sm leading-tight truncate max-w-[120px] sm:max-w-none">{title}</p>
                                     <p className="text-gray-500 text-xs">{total} ta savol</p>
                                 </div>
                             </div>
@@ -523,7 +573,7 @@ export default function QuizCategoryPage() {
                                     <span className={`text-xs font-semibold px-2 py-1 rounded-lg ${diff.cls}`}>{diff.label}</span>
                                 )}
                             </div>
-                            <h2 className="text-white text-base sm:text-xl font-semibold leading-relaxed">{current.question}</h2>
+                            <h2 className="text-white text-base sm:text-xl font-semibold leading-relaxed whitespace-pre-wrap break-words">{current.question}</h2>
                         </div>
 
                         <div className="flex flex-col gap-2.5">
@@ -602,6 +652,18 @@ export default function QuizCategoryPage() {
     }
 
     // ── LIBRARY MODE ──────────────────────────────────────────
+    if (comingSoon) return <ComingSoonPage title={category} what="quiz" backHref="/quiz" />;
+
+    const publish = async (published) => {
+        const res = await fetch(`/api/categories/${library.id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ published }),
+        }).catch(() => null);
+        if (!res?.ok) return (await res?.json().catch(() => null))?.message || "Saqlab bo'lmadi";
+        setLibrary(l => ({ ...l, published }));
+    };
+
     return (
         <div className="min-h-screen bg-gray-950">
             {editingQ && (
@@ -610,6 +672,12 @@ export default function QuizCategoryPage() {
                     onSave={handleSaveEdit}
                     onClose={() => setEditingQ(null)}
                 />
+            )}
+
+            {library && (
+                <div className="px-4 sm:px-6 pt-3">
+                    <PublishBar what="quiz" published={library.published} onChange={publish} />
+                </div>
             )}
 
             {/* Library header */}
@@ -626,7 +694,7 @@ export default function QuizCategoryPage() {
                     </div>
                     <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
-                            <h1 className="text-lg sm:text-xl font-extrabold text-white truncate">{category}</h1>
+                            <h1 className="text-lg sm:text-xl font-extrabold text-white truncate">{title}</h1>
                             <span className={`text-xs px-2 py-0.5 rounded-lg font-semibold ${bg} ${color} border ${border} hidden sm:inline-flex items-center gap-1`}>
                                 <Library size={9} /> Library
                             </span>
@@ -636,7 +704,16 @@ export default function QuizCategoryPage() {
                                 </span>
                             )}
                         </div>
-                        <p className="text-xs text-gray-500 mt-0.5">{allQuestions.length} ta savol</p>
+                        <p className="text-xs text-gray-500 mt-0.5">
+                            {allQuestions.length} ta savol
+                            {isAdmin && ` / ${isExtra ? EXTRA_LIMIT : MAIN_LIMIT}`}
+                            {isAdmin && (
+                                <Link href={`/quiz/${encodeURIComponent(category)}${isExtra ? '' : '?pool=extra'}`}
+                                    className="ml-3 text-purple-300 hover:text-purple-200">
+                                    {isExtra ? 'Asosiy library →' : "Qo'shimcha library →"}
+                                </Link>
+                            )}
+                        </p>
                     </div>
 
                     {/* Start quiz button */}
@@ -674,7 +751,7 @@ export default function QuizCategoryPage() {
             </div>
 
             {/* Filter bar */}
-            <div className="sticky top-0 z-20 bg-gray-950/95 backdrop-blur border-b border-gray-800/60 px-4 sm:px-6 py-2.5">
+            <div className="sticky top-16 z-20 bg-gray-950/95 backdrop-blur border-b border-gray-800/60 px-4 sm:px-6 py-2.5">
                 <div className="flex gap-2 items-center">
                     <div className="relative flex-1 max-w-sm">
                         <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none" />
@@ -691,6 +768,12 @@ export default function QuizCategoryPage() {
                             </button>
                         )}
                     </div>
+                    {isAdmin && (
+                        <button onClick={() => setAiOnly(v => !v)} aria-pressed={aiOnly}
+                            className={`flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-semibold border shrink-0 ${aiOnly ? 'bg-purple-900/60 border-purple-700 text-purple-300' : 'bg-gray-900 border-gray-800 text-gray-400 hover:text-white'}`}>
+                            <Sparkles size={11} /> Faqat AI
+                        </button>
+                    )}
                     <div className="flex items-center gap-1">
                         {['All', 'Easy', 'Medium', 'Hard'].map(v => (
                             <button
@@ -713,7 +796,15 @@ export default function QuizCategoryPage() {
             </div>
 
             {/* Question cards */}
-            <div className="px-4 sm:px-6 py-5">
+            <div data-guard-zone className="px-4 sm:px-6 py-5">
+                {!libLoading && rotation.hidden > 0 && (
+                    <p className="mb-3 rounded-xl border border-purple-900/60 bg-purple-900/20 px-3.5 py-2.5 text-xs text-purple-200">
+                        {rotation.hidden} ta savolni {MAX_SOLVES} martadan yechdingiz, ular endi chiqmaydi.
+                        {!isExtra && (rotation.replaced > 0
+                            ? ` ${rotation.replaced} tasi yangi savollar bilan almashtirildi.`
+                            : " Hozircha almashtirish uchun yangi savol yo'q.")}
+                    </p>
+                )}
                 {libLoading ? (
                     <div className="flex flex-col items-center justify-center py-24 gap-3">
                         <div className="w-8 h-8 border-2 border-green-500 border-t-transparent rounded-full animate-spin" />
@@ -721,8 +812,10 @@ export default function QuizCategoryPage() {
                     </div>
                 ) : filteredQuestions.length === 0 ? (
                     <div className="text-center py-20">
-                        <p className="text-gray-500 text-sm">Savol topilmadi</p>
-                        <button onClick={() => { setSearch(''); setDiffFilter('All'); }} className="text-green-400 text-sm mt-2 hover:underline">Tozalash</button>
+                        <p className="text-gray-500 text-sm">
+                            {allQuestions.length === 0 ? "Hozircha siz uchun savol yo'q. Yangi savollar har kuni qo'shiladi." : 'Savol topilmadi'}
+                        </p>
+                        <button onClick={() => { setSearch(''); setDiffFilter('All'); setAiOnly(false); }} className="text-green-400 text-sm mt-2 hover:underline">Tozalash</button>
                     </div>
                 ) : (
                     <>

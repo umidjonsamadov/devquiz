@@ -7,6 +7,28 @@
     .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 }
 
+/* Savol sahifasi himoyasi (lib/useContentGuard.js) */
+body.guard-on,
+body.guard-on * {
+    -webkit-user-select: none !important;
+    user-select: none !important;
+    -webkit-touch-callout: none !important;
+}
+body.guard-on :is(input, textarea, [contenteditable="true"], .monaco-editor, .monaco-editor *) {
+    -webkit-user-select: text !important;
+    user-select: text !important;
+}
+body.guard-on img {
+    -webkit-user-drag: none;
+}
+body.guard-on.guard-hidden main,
+body.guard-on.guard-latched main {
+    filter: blur(18px);
+}
+@media print {
+    body.guard-on { display: none !important; }
+}
+
 /* Netlify badge ni to'liq yashirish */
 #nl-badge-frame,
 iframe[id*="netlify"],

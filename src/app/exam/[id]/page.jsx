@@ -8,6 +8,8 @@ import {
     Code2, ListChecks, Trophy, AlertTriangle, Loader2, Send, Flag,
 } from 'lucide-react';
 import { preloadPython } from '../../../lib/codeRunner';
+import { reportViolation } from '../../../lib/violations';
+import { watchTouch } from '../../../lib/touchGuard';
 import { arrangeExam } from '../../../lib/shuffle';
 import CodeIDE from '../../../components/CodeIDE';
 import ExamResultSummary from '../../../components/ExamResultSummary';
@@ -49,7 +51,7 @@ export default function ExamTakePage() {
 
     // Eng so'nggi qiymatlar (event listener va finish ichida kerak)
     const dataRef = useRef({});
-    dataRef.current = { exam, answers, codes };
+    dataRef.current = { exam, answers, codes, idx };
     const endAtRef = useRef(0);
     const violationsRef = useRef(0);
     const lockedRef = useRef(false);
@@ -287,9 +289,13 @@ export default function ExamTakePage() {
         const onPopState = () => lock("Imtihon sahifasidan chiqdingiz");
         const block = (e) => e.preventDefault();
         const inIde = (e) => !!e.target?.closest?.('[data-ide]');
+        const report = (type, method) => {
+            const { exam: current, idx: at } = dataRef.current;
+            reportViolation({ source: 'exam', examId: id, itemId: String(current?.questions?.[at]?._id || ''), type, method });
+        };
         // IDE ichida nusxalash/qirqish mumkin (kodni ko'chirish uchun), tashqarida yo'q
         const onCopy = (e) => {
-            if (!inIde(e)) { e.preventDefault(); lock('Nusxalashga urinish aniqlandi'); return; }
+            if (!inIde(e)) { e.preventDefault(); report('copy', e.type === 'cut' ? 'cut' : 'copy'); lock('Nusxalashga urinish aniqlandi'); return; }
             try { clipRef.current = e.clipboardData.getData('text/plain'); } catch {}
         };
         // Qo'yish faqat IDE ichidan nusxalangan matn bo'lsa mumkin: tashqaridan kod kiritib bo'lmaydi
@@ -305,6 +311,7 @@ export default function ExamTakePage() {
             // e.code: "Shift" tugmasining o'zi (Ctrl+Shift — til almashtirish) skrinshot hisoblanmasin
             if (k === 'PrintScreen' || (e.metaKey && e.shiftKey) || (e.ctrlKey && e.shiftKey && e.code === 'KeyS')) {
                 navigator.clipboard?.writeText('').catch(() => {});
+                report('screenshot', k === 'PrintScreen' ? 'printscreen' : 'shortcut');
                 lock('Skrinshot urinishi aniqlandi');
                 e.preventDefault();
             }
@@ -314,6 +321,7 @@ export default function ExamTakePage() {
             if (isSwitchKey(e.key)) { held.delete(e.key); switchKeyUpAt = Date.now(); }
             if (e.key === 'PrintScreen') {
                 navigator.clipboard?.writeText('').catch(() => {});
+                report('screenshot', 'printscreen');
                 lock('Skrinshot urinishi aniqlandi');
             }
         };
@@ -332,6 +340,7 @@ export default function ExamTakePage() {
         window.addEventListener('keydown', onKeyDown, true);
         window.addEventListener('keyup', onKeyUp, true);
         window.addEventListener('beforeunload', onUnload);
+        const stopTouch = watchTouch(report);
         return () => {
             document.removeEventListener('fullscreenchange', onFs);
             document.removeEventListener('visibilitychange', onVis);
@@ -347,6 +356,7 @@ export default function ExamTakePage() {
             window.removeEventListener('keydown', onKeyDown, true);
             window.removeEventListener('keyup', onKeyUp, true);
             window.removeEventListener('beforeunload', onUnload);
+            stopTouch();
         };
     }, [phase, lock]);
 
@@ -553,7 +563,7 @@ export default function ExamTakePage() {
     );
 
     return (
-        <div className={`${shell} select-none flex flex-col`}>
+        <div data-guard-zone className={`${shell} select-none [-webkit-touch-callout:none] flex flex-col`}>
             {/* Suv belgisi: skrinshot/foto tarqatilsa kim ekanligi ma'lum bo'ladi */}
             <div aria-hidden className="pointer-events-none fixed inset-0 z-[5] overflow-hidden opacity-[0.05] text-white text-sm font-bold flex flex-wrap gap-x-16 gap-y-12 p-4 -rotate-12 scale-150">
                 {Array.from({ length: 150 }).map((_, i) => <span key={i}>{username}</span>)}

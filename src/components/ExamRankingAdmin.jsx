@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { Trophy, Medal, Search, RefreshCw, Users, TrendingUp, TrendingDown, FileText, Hourglass, ShieldAlert, Clock, ChevronDown } from "lucide-react";
 import { grade } from "./ExamResultSummary";
+import AdminPagination, { usePagination } from "./adminPagination";
 
 const r1 = (n) => Math.round(n * 10) / 10;
 
@@ -47,11 +48,10 @@ function Fact({ icon: Icon, label, value, tone = "text-white" }) {
 
 function ExamCard({ e, totalStudents }) {
     const [open, setOpen] = useState(false);
-    const [all, setAll] = useState(false);
+    const { pageItems, start, pager } = usePagination(e.entries, 5);
     const has = e.participants > 0;
     const g = grade(e.avgPercent);
     const share = totalStudents > 0 ? Math.min(100, (e.participants / totalStudents) * 100) : 0;
-    const shown = all ? e.entries : e.entries.slice(0, 5);
 
     return (
         <div className="bg-gray-950/60 border border-gray-800 rounded-2xl p-4 flex flex-col gap-3">
@@ -128,7 +128,9 @@ function ExamCard({ e, totalStudents }) {
 
                     {open && (
                         <div className="border border-gray-800 rounded-xl overflow-hidden">
-                            {shown.map((x, i) => (
+                            {pageItems.map((x, index) => {
+                                const i = start + index; // umumiy ro'yxatdagi o'rni
+                                return (
                                 <div key={x.username} className="flex items-center gap-3 px-3 py-2 border-b border-gray-800 last:border-0 text-xs">
                                     <span className="w-6 text-center shrink-0">
                                         {i < 3 ? <Medal size={16} className={["text-yellow-400", "text-gray-300", "text-amber-600"][i]} /> : <span className="text-gray-500 font-bold">{i + 1}</span>}
@@ -141,12 +143,9 @@ function ExamCard({ e, totalStudents }) {
                                     {x.minutes && <span className="text-gray-500 tabular-nums hidden sm:block">{x.minutes} daq</span>}
                                     <span className={`w-12 text-right font-bold tabular-nums ${grade(x.percent).text}`}>{x.percent}%</span>
                                 </div>
-                            ))}
-                            {e.entries.length > 5 && (
-                                <button onClick={() => setAll(!all)} className="w-full text-[11px] text-gray-400 hover:text-white py-2 bg-gray-900/60">
-                                    {all ? "Kamroq ko'rsatish" : `Hammasini ko'rish (${e.entries.length})`}
-                                </button>
-                            )}
+                                );
+                            })}
+                            <AdminPagination {...pager} className="px-3 py-2 bg-gray-900/60" />
                         </div>
                     )}
                 </>
@@ -162,12 +161,13 @@ function ExamBreakdown({ exams, totalStudents }) {
         people: (x, y) => y.participants - x.participants,
         name: (x, y) => x.title.localeCompare(y.title),
     }[sort]), [exams, sort]);
+    const { pageItems, pager, reset } = usePagination(list, 4);
 
     return (
         <div className="mb-6">
             <div className="flex items-center justify-between gap-2 mb-3 flex-wrap">
                 <p className="text-[11px] uppercase tracking-wider text-gray-500">Imtihonlar kesimida · {exams.length} ta</p>
-                <select value={sort} onChange={(e) => setSort(e.target.value)}
+                <select value={sort} onChange={(e) => { setSort(e.target.value); reset(); }}
                     className="bg-gray-800 border border-gray-700 text-gray-300 text-xs rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-green-600">
                     <option value="avg">O&apos;rtacha foiz bo&apos;yicha</option>
                     <option value="people">Qatnashganlar bo&apos;yicha</option>
@@ -175,8 +175,9 @@ function ExamBreakdown({ exams, totalStudents }) {
                 </select>
             </div>
             <div className="grid lg:grid-cols-2 gap-3 items-start">
-                {list.map((e) => <ExamCard key={e._id} e={e} totalStudents={totalStudents} />)}
+                {pageItems.map((e) => <ExamCard key={e._id} e={e} totalStudents={totalStudents} />)}
             </div>
+            <AdminPagination {...pager} className="mt-3" />
         </div>
     );
 }
@@ -202,6 +203,7 @@ export default function ExamRankingAdmin() {
     const rows = useMemo(() => ranking
         .map((u, i) => ({ ...u, rank: i + 1 }))
         .filter((u) => u.username.toLowerCase().includes(q.trim().toLowerCase())), [ranking, q]);
+    const { pageItems, pager, reset } = usePagination(rows, 10);
 
     const overallAvg = ranking.length ? ranking.reduce((s, u) => s + u.avgPercent, 0) / ranking.length : 0;
     const pendingTotal = ranking.reduce((s, u) => s + u.pending, 0);
@@ -255,13 +257,13 @@ export default function ExamRankingAdmin() {
 
                                 <div className="relative mb-3 max-w-xs">
                                     <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
-                                    <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Qidirish…"
+                                    <input value={q} onChange={(e) => { setQ(e.target.value); reset(); }} placeholder="Qidirish…"
                                         className="w-full pl-8 pr-3 py-2 bg-gray-800 border border-gray-700 rounded-xl text-xs text-white placeholder-gray-500 focus:outline-none focus:border-green-600" />
                                 </div>
 
                                 <div className="border border-gray-800 rounded-xl overflow-hidden">
                                     {rows.length === 0 && <p className="text-center text-gray-500 text-sm py-6">Hech narsa topilmadi</p>}
-                                    {rows.map((u) => {
+                                    {pageItems.map((u) => {
                                         const g = grade(u.avgPercent);
                                         const isOpen = open === u.username;
                                         return (
@@ -303,6 +305,7 @@ export default function ExamRankingAdmin() {
                                         );
                                     })}
                                 </div>
+                                <AdminPagination {...pager} className="mt-3" />
                                 <p className="text-[11px] text-gray-600 mt-2">Reyting: har bir imtihondagi foizlarning o&apos;rtachasi bo&apos;yicha. Teng bo&apos;lsa, jami ball hisobga olinadi.</p>
                             </>
                         )}

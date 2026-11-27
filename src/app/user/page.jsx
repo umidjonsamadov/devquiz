@@ -7,6 +7,7 @@ import {
     CheckCircle, XCircle, Settings, Clock, Crown, Medal, Sparkles, Lock, BookOpen,
 } from 'lucide-react';
 import { formatDuration, isOnlineNow } from '../../lib/formatDuration';
+import TrainProfileStats from '../../components/trainProfileStats';
 
 /* ── Avatar rang mavzulari (banner + halqa uchun) ── */
 const THEMES = {
@@ -371,6 +372,9 @@ export default function UserProfile() {
                     </div>
                 </Section>
             </div>
+
+            {/* ───────── Train ───────── */}
+            <TrainProfileStats />
 
             {/* ───────── Kunlik vazifalar ───────── */}
             <Section

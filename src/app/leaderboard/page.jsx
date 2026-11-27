@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { Zap, Trophy, ChevronLeft, ChevronRight, TrendingUp, Users, Target, Star, Lock, Clock } from 'lucide-react';
 import Link from 'next/link';
 import { formatDuration } from '../../lib/formatDuration';
+import TrainLeaderboard from '../../components/trainLeaderboard';
 
 const PER_PAGE = 10;
 
@@ -290,6 +291,7 @@ export default function LeaderboardPage() {
     const [total, setTotal]     = useState(0);
     const [page, setPage]       = useState(1);
     const [loading, setLoading] = useState(true);
+    const [boardType, setBoardType] = useState('xp'); // 'xp' | 'train'
 
     const totalPages = Math.max(1, Math.ceil(total / PER_PAGE));
     const startRank  = (page - 1) * PER_PAGE + 1;
@@ -403,43 +405,66 @@ export default function LeaderboardPage() {
     }
 
     return (
-        <div className="min-h-screen bg-gray-950 p-3 sm:p-6">
-            <div className="max-w-4xl mx-auto space-y-4">
+        <div className="min-h-screen bg-gray-950 p-[10px] space-y-4">
 
-                {/* Header */}
+            {/* Header: sarlavha sidebar tomonda, tugmalar qarama-qarshi tomonda.
+                Tor blokdan tashqarida, shuning uchun ikkala reytingda ham bir joyda turadi */}
+            <div className="grid items-center gap-3 grid-cols-[minmax(0,1fr)_auto] xl:grid-cols-[1fr_auto_1fr]">
                 <div>
                     <h1 className="text-xl sm:text-2xl font-bold text-white">Reyting jadvali</h1>
-                    <p className="text-gray-400 text-xs sm:text-sm mt-1">Eng ko'p XP to'plagan foydalanuvchilar</p>
+                    <p className="text-gray-400 text-xs sm:text-sm mt-1">
+                        {boardType === 'xp' ? "Eng ko'p XP to'plagan foydalanuvchilar" : "Train'da eng ko'p ball to'plagan foydalanuvchilar"}
+                    </p>
                 </div>
 
-                {/* Stats chips */}
-                <div className="flex flex-wrap gap-2">
-                    <div className="flex items-center gap-1.5 bg-gray-900 border border-gray-800 rounded-xl px-3 py-1.5">
-                        <Users size={13} className="text-blue-400" />
-                        <span className="text-white font-bold text-sm">{total}</span>
-                        <span className="text-gray-500 text-xs">ishtirokchi</span>
-                    </div>
-                    {myRank && (
-                        <div className="flex items-center gap-1.5 bg-green-900/20 border border-green-800/50 rounded-xl px-3 py-1.5">
-                            <TrendingUp size={13} className="text-green-400" />
-                            <span className="text-green-400 font-bold text-sm">#{myRank}</span>
-                            <span className="text-gray-400 text-xs">sizning o'rningiz</span>
-                        </div>
-                    )}
-                    {me && (
+                {/* O'rtadagi ko'rsatkichlar faqat XP reytingiga tegishli.
+                    Tor ekranda sarlavha va tugmalardan pastga tushadi */}
+                <div className="order-last col-span-2 xl:order-none xl:col-span-1 flex flex-wrap justify-center gap-2 empty:hidden xl:empty:flex">
+                    {boardType === 'xp' && (
+                    <>
                         <div className="flex items-center gap-1.5 bg-gray-900 border border-gray-800 rounded-xl px-3 py-1.5">
-                            <Zap size={13} className="text-green-400" />
-                            <span className="text-white font-bold text-sm">{(me.xp || 0).toLocaleString()} XP</span>
+                            <Users size={13} className="text-blue-400" />
+                            <span className="text-white font-bold text-sm">{total}</span>
+                            <span className="text-gray-500 text-xs">ishtirokchi</span>
                         </div>
-                    )}
-                    {me && (
-                        <div className="flex items-center gap-1.5 bg-gray-900 border border-gray-800 rounded-xl px-3 py-1.5">
-                            <Clock size={13} className="text-purple-400" />
-                            <span className="text-white font-bold text-sm">{formatDuration(me.timeSpent)}</span>
-                            <span className="text-gray-500 text-xs">saytda</span>
-                        </div>
+                        {myRank && (
+                            <div className="flex items-center gap-1.5 bg-green-900/20 border border-green-800/50 rounded-xl px-3 py-1.5">
+                                <TrendingUp size={13} className="text-green-400" />
+                                <span className="text-green-400 font-bold text-sm">#{myRank}</span>
+                                <span className="text-gray-400 text-xs">sizning o'rningiz</span>
+                            </div>
+                        )}
+                        {me && (
+                            <div className="flex items-center gap-1.5 bg-gray-900 border border-gray-800 rounded-xl px-3 py-1.5">
+                                <Zap size={13} className="text-green-400" />
+                                <span className="text-white font-bold text-sm">{(me.xp || 0).toLocaleString()} XP</span>
+                            </div>
+                        )}
+                        {me && (
+                            <div className="flex items-center gap-1.5 bg-gray-900 border border-gray-800 rounded-xl px-3 py-1.5">
+                                <Clock size={13} className="text-purple-400" />
+                                <span className="text-white font-bold text-sm">{formatDuration(me.timeSpent)}</span>
+                                <span className="text-gray-500 text-xs">saytda</span>
+                            </div>
+                        )}
+                    </>
                     )}
                 </div>
+
+                <div className="justify-self-end inline-flex gap-1 bg-gray-900 border border-gray-800 rounded-xl p-1">
+                    {[['xp', 'XP reytingi'], ['train', 'Train reytingi']].map(([key, label]) => (
+                        <button key={key} onClick={() => setBoardType(key)} aria-pressed={boardType === key}
+                            className={`px-4 py-1.5 rounded-lg text-xs sm:text-sm font-semibold transition-colors ${boardType === key ? 'bg-green-600 text-white' : 'text-gray-400 hover:text-white'}`}>
+                            {label}
+                        </button>
+                    ))}
+                </div>
+            </div>
+
+            {/* XP reytingi markazda tor, Train reytingi butun kenglikda */}
+            <div className={boardType === 'train' ? '' : 'max-w-4xl mx-auto space-y-4'}>
+                {boardType === 'train' ? <TrainLeaderboard /> : (
+                <>
 
                 {/* Podium */}
                 {top3.length >= 2 && (
@@ -494,6 +519,8 @@ export default function LeaderboardPage() {
                         </div>
                     )}
                 </div>
+                </>
+                )}
 
             </div>
         </div>

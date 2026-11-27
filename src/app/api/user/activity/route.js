@@ -1,5 +1,7 @@
+import { XP_MAX } from '../../../../lib/quizRules.js';
 import { connectDB } from '../../config/mongodb.js';
 import { User } from '../../models/User.js';
+import { getXpBoost } from '../../config/xpBoost.js';
 import { notifyMany } from '../../../../lib/notify.js';
 import {
     snapshot, achievementNotifications, levelNotification, streakNotifications,
@@ -38,12 +40,18 @@ export async function POST(req) {
 
         let { xpReward = 0, correct = false } = await req.json();
         if (!correct) xpReward = 0;
+        // Bitta savoldan XP_MAX dan ortiq olib bo'lmaydi (qiymat brauzerdan keladi)
+        xpReward = Math.min(XP_MAX, Math.max(0, Math.floor(Number(xpReward)) || 0));
 
         const today = new Date();
         today.setHours(0, 0, 0, 0);
 
         const user = await User.findOne({ username: session.username });
         if (!user) return new Response(JSON.stringify({ message: 'User not found' }), { status: 404 });
+
+        // Reytingda 1-o'rinda bo'lsa XP 2 barobar (XP qo'shilishidan oldin aniqlanadi)
+        const { multiplier } = await getXpBoost(user.username);
+        xpReward *= multiplier;
 
         // Bildirishnomalar uchun "oldingi" holat
         const before = snapshot(user);
@@ -106,8 +114,9 @@ export async function POST(req) {
                 if (ch.type === 'xp' && xpReward > 0) ch.progress = (ch.progress || 0) + xpReward;
                 if ((ch.progress || 0) >= ch.target) {
                     ch.completed = true;
-                    challengeBonus += ch.xpReward || 0;
-                    completedNow.push({ id: ch.id, title: ch.title, xp: ch.xpReward || 0 });
+                    const bonus = (ch.xpReward || 0) * multiplier;
+                    challengeBonus += bonus;
+                    completedNow.push({ id: ch.id, title: ch.title, xp: bonus });
                 }
             });
         }
@@ -135,7 +144,7 @@ export async function POST(req) {
 
         const userObj = user.toObject();
         delete userObj.password;
-        return new Response(JSON.stringify({ user: userObj, challengeBonus }), { status: 200 });
+        return new Response(JSON.stringify({ user: userObj, challengeBonus, xpMultiplier: multiplier }), { status: 200 });
     } catch (error) {
         console.error('Activity POST error:', error);
         return new Response(JSON.stringify({ message: 'Server xatosi' }), { status: 500 });

@@ -1,11 +1,16 @@
 import { connectDB } from '../config/mongodb.js';
 import { Question } from '../models/Question.js';
+import { isAdmin } from '../config/adminAuth.js';
+import { MAIN, unpublishedCategories } from '../config/questionPool.js';
 
-export async function GET() {
+export async function GET(req) {
     try {
         await connectDB();
 
+        const visible = isAdmin(req) ? {} : { ...MAIN, category: { $nin: await unpublishedCategories() } };
+
         const stats = await Question.aggregate([
+            { $match: visible },
             {
                 $group: {
                     _id: '$category',

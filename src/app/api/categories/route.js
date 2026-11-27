@@ -24,30 +24,42 @@ async function ensureCategories() {
     if (toCreate.length) await Category.insertMany(toCreate, { ordered: false }).catch(() => {});
 }
 
-export async function GET() {
+export async function GET(req) {
     try {
         await connectDB();
         await ensureCategories();
         const [cats, stats] = await Promise.all([
             Category.find().sort({ name: 1 }).lean(),
+            // Asosiy va qo'shimcha library alohida sanaladi
             Question.aggregate([{
                 $group: {
-                    _id: '$category',
+                    _id: { category: '$category', pool: { $cond: [{ $eq: ['$pool', 'extra'] }, 'extra', 'main'] } },
                     count: { $sum: 1 },
                     totalXp: { $sum: '$xpReward' },
                     difficulties: { $push: '$difficulty' },
                 },
             }]),
         ]);
-        const map = Object.fromEntries(stats.map(c => [c._id, c]));
-        const categories = cats.map(c => {
-            const s = map[c.name];
+        const map = new Map(stats.map(s => [`${s._id.pool}:${s._id.category}`, s]));
+        const summarize = (s) => {
             const diffCounts = { Easy: 0, Medium: 0, Hard: 0 };
             (s?.difficulties || []).forEach(d => { if (d in diffCounts) diffCounts[d]++; });
             let difficulty = 'Easy';
             if (diffCounts.Hard > 0) difficulty = 'Hard';
             else if (diffCounts.Medium > 0) difficulty = 'Medium';
-            return { ...c, count: s?.count || 0, totalXp: s?.totalXp || 0, diffCounts, difficulty };
+            return { count: s?.count || 0, totalXp: s?.totalXp || 0, diffCounts, difficulty };
+        };
+        // Qo'shimcha library haqidagi ma'lumot faqat adminga yuboriladi
+        const admin = isAdmin(req);
+        const categories = cats.map(c => {
+            if (!admin) {
+                // Nashr qilinmagan library'ning faqat nomi va ko'rinishi yuboriladi
+                return c.published === false
+                    ? { ...c, ...summarize(), comingSoon: true }
+                    : { ...c, ...summarize(map.get(`main:${c.name}`)) };
+            }
+            const extra = summarize(map.get(`extra:${c.name}`));
+            return { ...c, ...summarize(map.get(`main:${c.name}`)), extra, extraCount: extra.count };
         });
         return json({ categories });
     } catch (e) {
@@ -64,7 +76,7 @@ export async function POST(req) {
         if (!name?.trim()) return json({ message: 'Nom majburiy' }, 400);
         const dup = await Category.findOne({ name: new RegExp(`^${esc(name.trim())}$`, 'i') });
         if (dup) return json({ message: 'Bunday nomli library bor' }, 409);
-        const cat = await Category.create({ name: name.trim(), icon, color, description });
+        const cat = await Category.create({ name: name.trim(), icon, color, description, published: false });
         return json({ category: cat }, 201);
     } catch (e) {
         console.error('Categories POST error:', e);

@@ -1,5 +1,6 @@
 import { connectDB } from '../../../config/mongodb.js';
 import { User } from '../../../models/User.js';
+import { getXpBoost } from '../../../config/xpBoost.js';
 import { parseSession } from '../../../config/adminAuth.js';
 import {
     TIME_REWARDS, periodKeys, claimKey, computeSeconds, startOfToday,
@@ -36,11 +37,15 @@ export async function POST(req) {
             return json({ message: 'Vaqt hali yetarli emas' }, 400);
         }
 
+        // Reytingda 1-o'rinda bo'lsa XP 2 barobar
+        const { multiplier } = await getXpBoost(session.username);
+        const xp = reward.xp * multiplier;
+
         // Atomik: kalit allaqachon bo'lsa yangilanmaydi — ikki marta olib bo'lmaydi
         const key = claimKey(reward, keys);
         const updated = await User.findOneAndUpdate(
             { _id: user._id, claimedTimeRewards: { $ne: key } },
-            { $push: { claimedTimeRewards: key }, $inc: { xp: reward.xp } },
+            { $push: { claimedTimeRewards: key }, $inc: { xp } },
             { new: true }
         ).select('xp dailyXp dailyXpDate claimedTimeRewards');
         if (!updated) return json({ message: 'Bu mukofot allaqachon olingan' }, 409);
@@ -48,7 +53,7 @@ export async function POST(req) {
         // Level, bugungi XP va eski (o'tgan davr) kalitlarni tozalash
         const today = startOfToday(now);
         const sameDay = updated.dailyXpDate && startOfToday(new Date(updated.dailyXpDate)).getTime() === today.getTime();
-        const dailyXp = sameDay ? (updated.dailyXp || 0) + reward.xp : reward.xp;
+        const dailyXp = sameDay ? (updated.dailyXp || 0) + xp : xp;
         const prefixes = [`day:${keys.day}:`, `week:${keys.week}:`, `month:${keys.month}:`, 'life:'];
         const claimedTimeRewards = (updated.claimedTimeRewards || []).filter(k => prefixes.some(p => k.startsWith(p)));
 
@@ -58,7 +63,7 @@ export async function POST(req) {
         );
 
         // Level ko'tarilgan bo'lsa bildirishnoma
-        const lvlBefore = computeLevel(updated.xp - reward.xp);
+        const lvlBefore = computeLevel(updated.xp - xp);
         const lvlAfter = computeLevel(updated.xp);
         if (lvlAfter > lvlBefore) {
             await notify(session.username, {
@@ -67,7 +72,7 @@ export async function POST(req) {
             });
         }
 
-        return json({ ok: true, xp: reward.xp, totalXp: updated.xp, dailyXp });
+        return json({ ok: true, xp, xpMultiplier: multiplier, totalXp: updated.xp, dailyXp });
     } catch (e) {
         console.error('TimeRewards claim error:', e);
         return json({ message: 'Server xatosi' }, 500);

@@ -5,6 +5,8 @@ const categorySchema = new mongoose.Schema({
     icon: { type: String, default: 'BookOpen' },
     color: { type: String, default: 'green' },
     description: { type: String, default: '' },
+    aiEnabled: { type: Boolean, default: false }, // AI shu library uchun savol tuzsinmi
+    published: { type: Boolean, default: true }, // false — boshqalarga "Coming soon". Yangi library false bilan yaratiladi
     createdAt: { type: Date, default: Date.now },
 });
 

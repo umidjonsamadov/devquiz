@@ -11,15 +11,19 @@ import {
     Flame, HomeIcon, TrophyIcon, PlusIcon, BookOpenIcon, UserIcon,
     Shield as ShieldIcon,
     GraduationCap,
+    CodeIcon,
+    ShieldAlert,
 } from 'lucide-react';
 
 const menuItems = [
     { key: 'dashboard', label: 'Dashboard', icon: HomeIcon, route: '/dashboard' },
     { key: 'quiz', label: 'Solve Quiz', icon: BookOpenIcon, route: '/quiz' },
     { key: 'exam', label: 'Exam', icon: GraduationCap, route: '/exam' },
+    { key: 'train', label: 'Train', icon: CodeIcon, route: '/train' },
     { key: 'leaderboard', label: 'Leaderboard', icon: TrophyIcon, route: '/leaderboard' },
     { key: 'create', label: "Create Question", icon: PlusIcon, route: '/create' },
     { key: 'admin', label: 'Admin Panel', icon: ShieldIcon, route: '/admin' },
+    { key: 'violations', label: 'Qoida buzarliklar', icon: ShieldAlert, route: '/violations' },
     { key: 'profile', label: "Profile", icon: UserIcon, route: '/user' },
 ];
 
@@ -69,14 +73,14 @@ export default function Sidebar({ isExpanded }) {
     };
 
     const visibleMenu = menuItems.filter((item) => {
-        if (item.key === 'create' || item.key === 'admin') {
+        if (['create', 'admin', 'violations'].includes(item.key)) {
             return currentUser?.username === 'username';
         }
         return true;
     });
 
     const NavItem = ({ item }) => {
-        const isActive = pathname === item.route;
+        const isActive = pathname === item.route || (item.key === 'train' && pathname.startsWith('/train/'));
         const Icon = item.icon;
 
         if (item.key === 'chiqish') {
